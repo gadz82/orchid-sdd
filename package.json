@@ -1,0 +1,44 @@
+{
+  "name": "orchid-sdd",
+  "version": "0.2.0",
+  "description": "A memory-backed, specification-driven development (SDD) skill for coding agents.",
+  "type": "module",
+  "bin": {
+    "orchid-sdd": "./bin/orchid-sdd.mjs"
+  },
+  "files": [
+    "bin",
+    "cli",
+    "commands",
+    "claude-commands",
+    "claude-skills",
+    ".claude-plugin",
+    "SKILL.md",
+    "skills.sh.json",
+    "README.md",
+    ".skill",
+    "docs/orchid-sdd-design.md",
+    "docs/personas"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/setup.test.mjs tests/memory.test.mjs tests/lifecycle.test.mjs tests/workspace.test.mjs tests/migration.test.mjs tests/plugin.test.mjs tests/personas.test.mjs tests/skill-install.test.mjs tests/profiles.test.mjs tests/steering.test.mjs",
+    "plugin:check": "node --test tests/plugin.test.mjs",
+    "personas:check": "node --test tests/personas.test.mjs",
+    "skill:check": "node --test tests/skill-install.test.mjs",
+    "profiles:check": "node --test tests/profiles.test.mjs",
+    "steering:check": "node --test tests/steering.test.mjs"
+  },
+  "keywords": [
+    "sdd",
+    "spec-driven",
+    "coding-agent",
+    "opencode",
+    "claude-code",
+    "skills",
+    "plugin"
+  ],
+  "license": "MIT"
+}

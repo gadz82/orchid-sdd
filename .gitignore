@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build and test output
+coverage/
+dist/
+*.tgz
+*.tsbuildinfo
+
+# Python
+__pycache__/
+.venv/
+venv/
+
+# Local tooling and agent-skill test installs
+# Remove .agents/ if you intentionally commit project-scoped Vercel skills.
+.idea/
+.vscode/
+.vercel/
+.agents/
+.claude/
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
+
+# OS and logs
+.DS_Store
+Thumbs.db
+*.log
+
+# orchid-sdd local state
+.orchid/worktrees/
+.knowledge/run-log/
+.knowledge/iterations/*/execution/runs/
+.knowledge/iterations/*/plan/prompts/_bus/
+.orchid-migration-bck/
