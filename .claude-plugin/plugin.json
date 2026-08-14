@@ -1,0 +1,24 @@
+{
+  "name": "orchid-sdd",
+  "displayName": "orchid-sdd",
+  "version": "0.2.0",
+  "description": "Memory-backed, specification-driven development for Claude Code. Explicit-only /orchid-sdd:run workflow with a local Node CLI.",
+  "author": {
+    "name": "orchid-sdd contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "sdd",
+    "spec-driven-development",
+    "memory",
+    "agents",
+    "workflow"
+  ],
+  "commands": [
+    "./claude-commands/run.md",
+    "./commands/orchid-sdd.md"
+  ],
+  "skills": [
+    "./claude-skills"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "orchid-sdd",
+  "owner": {
+    "name": "orchid-sdd contributors"
+  },
+  "plugins": [
+    {
+      "name": "orchid-sdd",
+      "source": "./",
+      "description": "Memory-backed, specification-driven development for Claude Code. Explicit-only /orchid-sdd:run workflow with a local Node CLI."
+    }
+  ],
+  "description": "A Claude Code plugin for orchid-sdd: memory-backed, specification-driven development with an explicit-only local CLI workflow."
+}

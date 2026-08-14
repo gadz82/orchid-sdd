@@ -1,0 +1,13 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "orchid-sdd",
+      "description": "Memory-backed, specification-driven development for coding agents.",
+      "skills": [
+        "orchid-sdd"
+      ]
+    }
+  ]
+}
