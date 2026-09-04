@@ -1,0 +1,27 @@
+---
+id: code-style-sonarqube
+title: SonarQube quality-gate preset
+summary: The project quality gate is blocking for new code and new violations.
+kind: code_style
+authority: blocking
+phases: [assessment, build, code_review, logic_review]
+tags: [sonarqube, quality-gate, coverage, static-analysis]
+---
+# Rule
+
+The SonarQube quality gate is the source of truth for static analysis. New code must not add
+blocking issues, security hotspots, or uncovered branches beyond the project threshold. The
+quality gate must run on the integration result, not only on an implementer’s local branch.
+
+# Checks
+
+- The quality-gate command or scanner is recorded and reproducible.
+- New violations are zero for the project’s blocking severities.
+- Coverage and duplication thresholds are evaluated for new code.
+- `NOSONAR` and exclusions are reviewed and owned.
+- Security hotspots have a disposition, not a silent dismissal.
+
+# Evidence
+
+Attach the quality-gate result, project key, branch/revision, and scan timestamp to the prompt
+report and the logic-review checklist.
