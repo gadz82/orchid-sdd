@@ -219,7 +219,8 @@ stops with anchors and test commands. Verify links and commands, then
 
 # Steering rules
 
-Steering is the selectable, phase-aware layer for architecture, examples, code style,
+Steering is the selectable, phase-aware layer for architecture, SOLID principles, dependency
+inversion and DI containers, SAGA coordination, examples, language-agnostic code style,
 repository flow, and process rules. The constitution applies everywhere; steering names the
 explicit project decisions that must be checked and cited.
 
@@ -229,6 +230,8 @@ explicit project decisions that must be checked and cited.
 - `steering.enabled` is the available set; `steering.phases.<phase>` is the ordered active set.
 - Every rule has `authority: advisory|blocking`, a `kind`, phases, checks, evidence, and
   optional example paths. A project file with the same `id` overrides a default.
+- Shipped examples cover TypeScript, Go, Python, PHP, Rust, Java, and Ruby; use the closest
+  language example and adapt it to the project’s real conventions.
 - Discovery converts applicable rules into requirements, scenarios, questions, assumptions, or
   ADR-backed exceptions. It does not review implementation style.
 - Logic review verifies every active rule against the integration branch, records a verdict and

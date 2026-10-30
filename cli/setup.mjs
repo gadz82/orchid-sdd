@@ -160,7 +160,7 @@ tags: [architecture, project]
 examples:
   - path: examples/my-rule.ts
     title: "Approved shape"
-    language: typescript
+    language: typescript # use the project's language
 ---
 # Rule
 ...
@@ -169,6 +169,9 @@ examples:
 # Evidence
 ...
 \`\`\`
+
+The example language is illustrative. Shipped examples cover TypeScript, Go, Python, PHP,
+Rust, Java, and Ruby.
 
 Enable it in \`orchid-sdd.yml\`:
 
@@ -217,11 +220,9 @@ export function applySteeringChoices(catalog, options = {}) {
     }
     const category = id.startsWith("architecture-")
       ? "architecture"
-      : id.startsWith("code-style-")
-        ? "style"
-        : id.startsWith("repository-")
-          ? "repository"
-          : null;
+      : id.startsWith("repository-")
+        ? "repository"
+        : null;
     if (category && categories.has(category)) {
       throw new OrchidError(
         `choose at most one ${category} preset: "${categories.get(category)}" and "${id}"`,
@@ -685,8 +686,18 @@ const STEERING_PRESET_ALIASES = {
   hexagonal: "architecture-hexagonal",
   onion: "architecture-onion",
   clean: "architecture-clean",
+  ddd: "architecture-ddd",
+  cqrs: "architecture-cqrs",
+  "event-driven": "architecture-event-driven",
+  event: "architecture-event-driven",
   ts: "code-style-typescript",
   typescript: "code-style-typescript",
+  go: "code-style-go",
+  python: "code-style-python",
+  php: "code-style-php",
+  rust: "code-style-rust",
+  java: "code-style-java",
+  ruby: "code-style-ruby",
   sonar: "code-style-sonarqube",
   sonarqube: "code-style-sonarqube",
   trunk: "repository-trunk-based",
@@ -720,7 +731,7 @@ async function manageSteering(rl, catalog) {
   );
   const enabled = await askYes(
     rl,
-    "Enable the six recommended steering rules? [Y/n]: ",
+    "Enable the recommended core steering rules? [Y/n]: ",
     true,
   );
   if (!enabled) {
@@ -735,7 +746,14 @@ async function manageSteering(rl, catalog) {
     rl,
     catalog,
     "Architecture preset",
-    ["architecture-hexagonal", "architecture-onion", "architecture-clean"],
+    [
+      "architecture-hexagonal",
+      "architecture-onion",
+      "architecture-clean",
+      "architecture-ddd",
+      "architecture-cqrs",
+      "architecture-event-driven",
+    ],
   );
   if (architecture) presets.push(architecture);
 
@@ -743,7 +761,16 @@ async function manageSteering(rl, catalog) {
     rl,
     catalog,
     "Code style preset",
-    ["code-style-typescript", "code-style-sonarqube"],
+    [
+      "code-style-typescript",
+      "code-style-go",
+      "code-style-python",
+      "code-style-php",
+      "code-style-rust",
+      "code-style-java",
+      "code-style-ruby",
+      "code-style-sonarqube",
+    ],
   );
   if (style) presets.push(style);
 
@@ -909,7 +936,7 @@ export async function setupWizard(root, skillRoot, providedProfile, providedProj
         `  Steering:   ${
           steeringOptions.enabled
             ? [
-                "6 core rules",
+                `${DEFAULT_CONFIG.steering.enabled.length} core rules`,
                 ...(steeringOptions.presets.length ? steeringOptions.presets : []),
                 steeringOptions.discovery ? "Discovery enabled" : "Discovery disabled",
                 steeringOptions.logicReview ? "Logic Review enabled" : "Logic Review disabled",

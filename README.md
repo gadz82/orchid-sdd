@@ -269,10 +269,11 @@ The interactive wizard has seven short steps:
 Most choices are written to plain YAML and can be changed later; changing the profile itself
 does not regenerate dependent files.
 
-Step 6 explains the six core rules, then offers one optional architecture preset, one code
-style preset, and one repository workflow preset. It also asks whether steering applies to
-Discovery and Logic Review. Enter accepts the default; type `none` to skip an optional
-preset.
+Step 6 explains the nine core rules, then offers one optional architecture preset, one
+code-style preset, and one repository workflow preset. It also asks whether steering applies
+to Discovery and Logic Review. Enter accepts the default; type `none` to skip an optional
+preset. For a multi-language project, add more `--steering-preset` flags or list the chosen
+style presets in `orchid-sdd.yml`.
 
 Agents and CI should skip the prompts and pass explicit answers:
 
@@ -575,15 +576,15 @@ contains the generated profile pack. Compose with `@include`; do not edit the sk
 
 ### Steering
 
-Steering is the phase-aware layer for architecture, examples, style, and repository rules.
-The constitution remains the baseline for how code is written; steering names the explicit
-project decisions that Discovery and Logic Review must check. Rules are Markdown files with
-front matter, resolved by ID like personas. The front-matter contract is published at
-`.skill/schemas/steering.schema.json`.
+Steering is the phase-aware layer for architecture, examples, language-agnostic style,
+principles, and repository rules. The constitution remains the baseline for how code is
+written; steering names the explicit project decisions that Discovery and Logic Review must
+check. Rules are Markdown files with front matter, resolved by ID like personas. The
+front-matter contract is published at `.skill/schemas/steering.schema.json`.
 
 | Key | Default | Meaning / values | Acted on by |
 |---|---|---|---|
-| `steering.enabled` | six core rule IDs | Rules available to the project; disabled IDs cannot be phase-mapped | CLI/Agent |
+| `steering.enabled` | nine core rule IDs | Rules available to the project; disabled IDs cannot be phase-mapped | CLI/Agent |
 | `steering.search_paths` | `.orchid/steering`, `domains/*/steering` | Project rule directories; one-level `*` | CLI |
 | `steering.overrides.<ID>.authority` | rule default | `advisory` or `blocking` | CLI/Agent |
 | `steering.overrides.<ID>.phases` | rule default | Phase list override | CLI/Agent |
@@ -595,12 +596,12 @@ The seeded phases are:
 ```yaml
 steering:
   phases:
-    discovery: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering]
-    assessment: [architecture-boundaries, code-style, code-examples, repository-flow]
-    planning: [architecture-boundaries, code-examples, repository-flow]
-    build: [architecture-boundaries, code-style, code-examples, repository-flow]
-    code_review: [architecture-boundaries, code-style, code-examples, repository-flow]
-    logic_review: [architecture-boundaries, code-style, code-examples, repository-flow, logic-review-steering]
+    discovery: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering]
+    assessment: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern]
+    planning: [architecture-boundaries, solid-principles, dependency-inversion-container, code-examples, repository-flow, saga-pattern]
+    build: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern]
+    code_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern]
+    logic_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, logic-review-steering]
 ```
 
 `steering context --phase P` returns the ordered rules, their source files, example paths, and
@@ -876,27 +877,34 @@ Kinds are `architecture`, `code_style`, `example`, `repository`, `process`, and 
 to the rule file. A project file with the same `id` overrides a default; `extends` is optional.
 The generated `.orchid/steering/README.md` is a starter.
 
-The six core defaults are:
+The nine core defaults are:
 
 | Rule | Kind | Default phases | What it steers |
 |---|---|---|---|
 | `architecture-boundaries` | architecture | discovery → logic review | Inward dependencies and explicit ports/adapters |
-| `code-style` | code_style | discovery, assessment, build, code review, logic review | Linter, formatter, type checker, static analysis |
-| `code-examples` | example | discovery → logic review | Small, current, runnable snippets as contracts |
+| `solid-principles` | architecture | discovery → logic review | SRP, OCP, LSP, ISP, and DIP applied pragmatically |
+| `dependency-inversion-container` | architecture | discovery → logic review | Explicit composition roots and optional DI containers |
+| `code-style` | code_style | discovery, assessment, build, code review, logic review | Any language’s linter, formatter, type checker, and static analysis |
+| `code-examples` | example | discovery → logic review | Small, current snippets in the project’s language |
 | `repository-flow` | repository | discovery → logic review | Branch, review, merge, and release flow |
+| `saga-pattern` | architecture | discovery → logic review | Distributed steps, compensation, idempotency, and recovery |
 | `discovery-steering` | process | discovery | Turns constraints into requirements and acceptance evidence |
 | `logic-review-steering` | process | logic review | Verifies every active rule against integrated behavior |
 
+The shipped examples cover TypeScript, Go, Python, PHP, Rust, Java, and Ruby under
+`.skill/steering/examples/`; the `code-examples` rule lists all of them.
+
 Optional presets live in `.skill/steering/presets/`:
 
-- architecture: `architecture-hexagonal`, `architecture-onion`, `architecture-clean`
-- code style: `code-style-typescript`, `code-style-sonarqube`
+- architecture: `architecture-hexagonal`, `architecture-onion`, `architecture-clean`, `architecture-ddd`, `architecture-cqrs`, `architecture-event-driven`
+- code style: `code-style-typescript`, `code-style-go`, `code-style-python`, `code-style-php`, `code-style-rust`, `code-style-java`, `code-style-ruby`, `code-style-sonarqube`
 - repository: `repository-trunk-based`, `repository-gitflow`, `repository-xp-mainline`
 
-Enable at most one architecture preset, one style-tool preset, and one repository preset;
-competing presets produce contradictory steering. The core `repository-flow` defers to an
-active repository preset; if you select `repository-xp-mainline`, it changes the branch flow
-and requires matching `execution`/release configuration plus an ADR.
+Enable at most one architecture preset and one repository preset. Code-style presets may be
+combined when the project uses several languages; enable only tools the project actually
+enforces. The core `repository-flow` defers to an active repository preset; if you select
+`repository-xp-mainline`, it changes the branch flow and requires matching
+`execution`/release configuration plus an ADR.
 
 **Suggested Discovery rules.** Add these to your project or use the shipped
 `discovery-steering` rule: boundary fit (which ports/contracts are touched), repository fit

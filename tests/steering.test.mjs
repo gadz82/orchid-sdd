@@ -52,15 +52,18 @@ test("setup seeds steering rules and the project steering folder", () => {
     "architecture-boundaries",
     "code-examples",
     "code-style",
+    "dependency-inversion-container",
     "discovery-steering",
     "logic-review-steering",
     "repository-flow",
+    "saga-pattern",
+    "solid-principles",
   ]);
   assert.ok(rows.some((row) => row.id === "architecture-hexagonal" && !row.enabled));
 
   const doctor = cli(root, "doctor");
   assert.equal(doctor.code, 0, doctor.all);
-  assert.match(doctor.out, /steering: 6 enabled rule/);
+  assert.match(doctor.out, /steering: 9 enabled rule/);
 });
 
 test("non-interactive setup accepts steering presets", () => {
@@ -192,7 +195,7 @@ test("steering context returns the rules for discovery and logic review", () => 
   assert.equal(discoveryPayload.artifact, "discovery/steering.md");
   assert.deepEqual(
     discoveryPayload.rules.map((rule) => rule.id),
-    ["architecture-boundaries", "code-style", "code-examples", "repository-flow", "discovery-steering"],
+    ["architecture-boundaries", "solid-principles", "dependency-inversion-container", "code-style", "code-examples", "repository-flow", "saga-pattern", "discovery-steering"],
   );
 
   const review = cli(root, "steering", "context", "--phase", "logic_review", "--json");
@@ -208,12 +211,12 @@ test("an optional architecture preset can be enabled for discovery", () => {
   setup(root);
   editConfig(root, [
     [
-      "enabled: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, logic-review-steering]",
-      "enabled: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, logic-review-steering, architecture-hexagonal]",
+      "enabled: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, logic-review-steering]",
+      "enabled: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, logic-review-steering, architecture-hexagonal]",
     ],
     [
-      "discovery: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering]",
-      "discovery: [architecture-boundaries, architecture-hexagonal, code-style, code-examples, repository-flow, discovery-steering]",
+      "discovery: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering]",
+      "discovery: [architecture-boundaries, solid-principles, dependency-inversion-container, architecture-hexagonal, code-style, code-examples, repository-flow, saga-pattern, discovery-steering]",
     ],
   ]);
   assert.equal(cli(root, "doctor").code, 0);
@@ -221,6 +224,19 @@ test("an optional architecture preset can be enabled for discovery", () => {
   assert.equal(context.code, 0, context.all);
   const rules = JSON.parse(context.out).rules;
   assert.ok(rules.some((rule) => rule.id === "architecture-hexagonal"));
+});
+
+test("code-examples provides snippets for every supported language", () => {
+  const root = tmp();
+  setup(root);
+  const show = cli(root, "steering", "show", "code-examples", "--json");
+  assert.equal(show.code, 0, show.all);
+  const rule = JSON.parse(show.out);
+  const languages = [...new Set(rule.examples.map((example) => example.language))].sort();
+  assert.deepEqual(languages, ["go", "java", "php", "python", "ruby", "rust", "typescript"]);
+  for (const example of rule.examples) {
+    assert.ok(fs.existsSync(example.file), `missing ${example.language} example`);
+  }
 });
 
 test("steering show exposes the rule, its examples, and example content", () => {
@@ -273,16 +289,16 @@ test("project steering rules can be enabled and assigned to phases", () => {
   fs.writeFileSync(path.join(root, ".orchid/steering/project-rule.md"), projectRule());
   editConfig(root, [
     [
-      "enabled: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, logic-review-steering]",
-      "enabled: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, logic-review-steering, project-rule]",
+      "enabled: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, logic-review-steering]",
+      "enabled: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, logic-review-steering, project-rule]",
     ],
     [
-      "discovery: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering]",
-      "discovery: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, project-rule]",
+      "discovery: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering]",
+      "discovery: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, project-rule]",
     ],
     [
-      "logic_review: [architecture-boundaries, code-style, code-examples, repository-flow, logic-review-steering]",
-      "logic_review: [architecture-boundaries, code-style, code-examples, repository-flow, logic-review-steering, project-rule]",
+      "logic_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, logic-review-steering]",
+      "logic_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, logic-review-steering, project-rule]",
     ],
   ]);
 
@@ -302,8 +318,8 @@ test("unknown steering references fail doctor and steering commands", () => {
   setup(root);
   editConfig(root, [
     [
-      "enabled: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, logic-review-steering]",
-      "enabled: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, logic-review-steering, missing-rule]",
+      "enabled: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, logic-review-steering]",
+      "enabled: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, logic-review-steering, missing-rule]",
     ],
   ]);
   const doctor = cli(root, "doctor");

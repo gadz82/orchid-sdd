@@ -298,16 +298,16 @@ constitution:
   lock: true
 
 steering:
-  enabled: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering, logic-review-steering]
+  enabled: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering, logic-review-steering]
   search_paths: [.orchid/steering, domains/*/steering]
   overrides: {}
   phases:
-    discovery: [architecture-boundaries, code-style, code-examples, repository-flow, discovery-steering]
-    assessment: [architecture-boundaries, code-style, code-examples, repository-flow]
-    planning: [architecture-boundaries, code-examples, repository-flow]
-    build: [architecture-boundaries, code-style, code-examples, repository-flow]
-    code_review: [architecture-boundaries, code-style, code-examples, repository-flow]
-    logic_review: [architecture-boundaries, code-style, code-examples, repository-flow, logic-review-steering]
+    discovery: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, discovery-steering]
+    assessment: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern]
+    planning: [architecture-boundaries, solid-principles, dependency-inversion-container, code-examples, repository-flow, saga-pattern]
+    build: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern]
+    code_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern]
+    logic_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, logic-review-steering]
 
 sources:                        # v1: all sources are read-only (§10.1)
   - id: product-specs
@@ -1516,7 +1516,8 @@ There is no single precedence chain. A product requirement does not override a s
 
 The constitution is the baseline for **how code is written**. Steering is the selectable,
 phase-aware layer for explicit project decisions that must be **checked and cited**. It covers
-architecture and design patterns, code examples, automated code-style gates, repository flow,
+architecture and design patterns, SOLID principles, dependency inversion and DI containers,
+SAGA coordination, code examples, automated code-style gates in any language, repository flow,
 and process rules such as Discovery and Logic Review checks.
 
 A steering rule is a Markdown file with YAML front matter:
@@ -1556,13 +1557,19 @@ set; it overrides the rule’s default `phases`. `steering.overrides.<ID>` can s
 `phases`, or load a `file`. Unknown, disabled, duplicate, or unrecognised phase references fail
 `doctor` and the `steering` command.
 
-**Shipped defaults.** The core rules are `architecture-boundaries`, `code-style`,
-`code-examples`, `repository-flow`, `discovery-steering`, and `logic-review-steering`.
-Optional presets are shipped for hexagonal, onion, and clean architecture; TypeScript and
-SonarQube style gates; and trunk-based, Git-flow, and XP mainline repository flows. A project
-should enable at most one architecture preset and one repository preset; contradictory presets
-are a configuration smell. The core `repository-flow` rule defers to an active repository
-preset and checks that the declared flow and the actual commands agree.
+**Shipped defaults.** The core rules are `architecture-boundaries`, `solid-principles`,
+`dependency-inversion-container`, `code-style`, `code-examples`, `repository-flow`, `saga-pattern`,
+`discovery-steering`, and `logic-review-steering`.
+Optional presets are shipped for hexagonal, onion, clean, DDD, CQRS, and event-driven
+architecture; TypeScript, Go, Python, PHP, Rust, Java, Ruby, and SonarQube style gates; and
+trunk-based, Git-flow, and XP mainline repository flows. A project should enable at most one
+architecture preset and one repository preset; code-style presets may be combined for a
+multi-language project. Contradictory presets are a configuration smell. The core
+`repository-flow` rule defers to an active repository preset and checks that the declared flow
+and the actual commands agree.
+
+The `examples/` directory contains the same boundary/DI shape in TypeScript, Go, Python, PHP,
+Rust, Java, and Ruby. They demonstrate language idioms rather than prescribing a single syntax.
 
 **Discovery application.** `steering context --phase discovery` returns the active rules and
 the artifact `discovery/steering.md`. The PM converts applicable rules into requirements,
@@ -1949,7 +1956,7 @@ sensible default; nothing is written until step 7 is confirmed.
    owns one shared knowledge base; otherwise single-repository mode is used.
 5. **Choose who participates.** PM, DEV, and QE are included; add catalog specialists, create
    a custom role, or change an existing role.
-6. **Choose steering rules.** Enable the six core rules, optionally add one architecture, one
+6. **Choose steering rules.** Enable the nine core rules, optionally add one architecture, one
    code-style, and one repository preset, and choose whether rules apply to Discovery and
    Logic Review (§9.4).
 7. **Review and create.** Print every choice, then write the config, directories, manifest v0,
@@ -2264,7 +2271,7 @@ No decisions remain open. Decisions that arise during implementation are recorde
 | **M3 — Build and review** | Scheduler, worktrees, context packs, bus, adversarial CR, fix loop, logic review loop | Two prompts run in parallel without file conflicts; CR blocks a seeded defect; logic review generates a follow-up prompt |
 | **M4 — Closure and handover** | Audit move, freeze, release notes, handover/tour generator, external MCP sources, full eval regression suite | A full iteration closes, archives, and produces a verified tour; missing MCP blocks with a clear message |
 | **M5 — Workspace and migration** (v0.2.0) | Nested-repo detection, root-owned workspace config, per-repo `extends` overrides, project-scoped memory, Git state/clean-tree guards, `migrate scan/backup/init/status/finalize`, backup manifest and LLM reconstruction plan | A multi-repo workspace and a legacy `.knowledge` project both migrate non-destructively; workspace status/doctor pass; migration reaches `phase: ready` |
-| **M6 — Steering rules** (unreleased) | ID-resolved architecture, example, style, repository, and process rules; phase maps for Discovery and Logic Review; project overrides; `steering list/show/context`; gate audit metadata | Setup seeds defaults; `doctor` validates references and examples; Discovery and Logic Review emit the rule pack and evidence artifact |
+| **M6 — Steering rules** (unreleased) | ID-resolved architecture, SOLID, dependency inversion/DI, SAGA, example, style, repository, and process rules; cross-language examples; phase maps for Discovery and Logic Review; project overrides; `steering list/show/context`; gate audit metadata | Setup seeds defaults; `doctor` validates references and examples; Discovery and Logic Review emit the rule pack and evidence artifact |
 
 The order is deliberate: memory and validation first, because every later phase depends on them. Building the orchestrator before the manifest would create a system that cannot explain itself.
 

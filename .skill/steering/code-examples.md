@@ -5,7 +5,7 @@ summary: Examples are small, current, runnable illustrations of the desired styl
 kind: example
 authority: advisory
 phases: [discovery, assessment, planning, build, code_review, logic_review]
-tags: [examples, style, snippets, tests]
+tags: [examples, style, snippets, tests, cross-language]
 examples:
   - path: examples/typescript/domain-service.ts
     title: "Domain service with an explicit port"
@@ -16,11 +16,31 @@ examples:
   - path: examples/typescript/domain-service.test.ts
     title: "Test at the domain boundary"
     language: typescript
+  - path: examples/go/domain_service.go
+    title: "Go domain service with a repository port"
+    language: go
+  - path: examples/python/domain_service.py
+    title: "Python domain service with a protocol"
+    language: python
+  - path: examples/php/DomainService.php
+    title: "PHP domain service with a repository interface"
+    language: php
+  - path: examples/rust/domain_service.rs
+    title: "Rust domain service with a trait"
+    language: rust
+  - path: examples/java/DeactivateUser.java
+    title: "Java domain service with an interface"
+    language: java
+  - path: examples/ruby/domain_service.rb
+    title: "Ruby domain service with dependency injection"
+    language: ruby
 ---
 # Rule
 
-Examples show the **shape** of acceptable code. They are not copy-paste inventory, and they are
-not a substitute for the constitution. Every example must:
+Examples show the **shape** of acceptable code in the project’s actual language. They are not
+copy-paste inventory, and they are not a substitute for the constitution. The shipped examples
+cover TypeScript, Go, Python, PHP, Rust, Java, and Ruby; use the closest one and adapt its
+idioms. Every example must:
 
 - be small enough to read in one screen;
 - compile or be explicitly labelled as pseudocode;

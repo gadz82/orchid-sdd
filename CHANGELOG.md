@@ -36,6 +36,10 @@ Claude Code packaging:
 - Applied steering to Discovery and Logic Review with `discovery/steering.md` and
   `reviews/steering-review.md` evidence artifacts, plus optional architecture, style, and
   repository presets.
+- Made the default style rule language- and tool-agnostic. Added examples for TypeScript,
+  Go, Python, PHP, Rust, Java, and Ruby.
+- Added core SOLID, dependency inversion/DI container, and SAGA steering rules.
+- Added optional DDD, CQRS, event-driven, and language-specific style presets.
 - Added a seven-step, plain-language setup wizard with a steering step for core rules,
   optional presets, and Discovery/Logic Review application.
 - Added agent-friendly setup flags: `--steering-preset`, `--no-steering`,
