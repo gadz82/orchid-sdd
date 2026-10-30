@@ -45,10 +45,11 @@ orchid-sdd steering context --phase logic_review
 ```
 
 The core rules cover architecture boundaries, SOLID principles, dependency inversion and DI
-containers, cross-language style gates, examples, repository flow, and SAGA coordination. The
-shipped `presets/` are optional and include hexagonal, onion, clean, DDD, CQRS, and event-driven
-architecture; language-specific style gates; and repository workflows. Examples live under
-`examples/` for TypeScript, Go, Python, PHP, Rust, Java, and Ruby.
+containers, cross-language style gates, examples, repository flow, and SAGA coordination. Core
+rules live in `default-presets/`; optional rules live in `available-presets/`, including
+hexagonal, onion, clean, DDD, CQRS, and event-driven architecture, language-specific style
+gates, and repository workflows. Examples live under `examples/` for TypeScript, Go, Python,
+PHP, Rust, Java, and Ruby.
 
 Enable only the architecture and repository patterns the project has actually chosen; several
 code-style presets may be combined for a multi-language repository. Enabling competing

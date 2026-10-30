@@ -12,7 +12,7 @@ test("skill install targets OpenCode project paths", () => {
   for (const file of [
     ".opencode/skills/orchid-sdd/SKILL.md",
     ".opencode/skills/orchid-sdd/.skill/personas/PM.md",
-    ".opencode/skills/orchid-sdd/.skill/steering/architecture-boundaries.md",
+    ".opencode/skills/orchid-sdd/.skill/steering/default-presets/architecture-boundaries.md",
     ".opencode/skills/orchid-sdd/cli/cli.mjs",
     ".opencode/skills/orchid-sdd/bin/orchid-sdd.mjs",
     ".opencode/skills/orchid-sdd/docs/personas/PM.md",

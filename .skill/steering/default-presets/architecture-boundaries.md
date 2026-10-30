@@ -7,10 +7,10 @@ authority: blocking
 phases: [discovery, assessment, planning, build, code_review, logic_review]
 tags: [architecture, boundaries, dependencies, ports]
 examples:
-  - path: examples/typescript/hexagonal-port.ts
+  - path: ../examples/typescript/hexagonal-port.ts
     title: "Port and adapter boundary"
     language: typescript
-  - path: examples/typescript/domain-service.ts
+  - path: ../examples/typescript/domain-service.ts
     title: "Domain service using a port"
     language: typescript
 ---

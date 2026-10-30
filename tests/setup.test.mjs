@@ -145,7 +145,7 @@ test("the skill package ships personas, profiles, and constitution defaults", ()
     ".skill/personas/QE.md",
     ".skill/templates/profiles/backend.json",
     ".skill/templates/profiles/monorepo.json",
-    ".skill/steering/architecture-boundaries.md",
+    ".skill/steering/default-presets/architecture-boundaries.md",
     ".skill/constitution/constitution.md",
     ".skill/schemas/config.schema.json",
     ".skill/schemas/steering.schema.json",

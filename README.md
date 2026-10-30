@@ -847,7 +847,11 @@ The generated `_profile/` pack is setup-owned; put team edits in the project fol
 
 Steering rules are **selectable** contracts. The constitution applies everywhere; a steering
 rule is an explicit project decision that can be enabled, assigned to phases, and cited at a
-gate. Each rule is a Markdown file with YAML front matter:
+gate. The catalog is split by lifecycle, not by type: `default-presets/` contains the rules
+setup enables automatically, while `available-presets/` contains optional rules you can add.
+Both resolve through the same ID registry and override mechanism.
+
+Each rule is a Markdown file with YAML front matter:
 
 ```md
 ---
@@ -894,7 +898,7 @@ The nine core defaults are:
 The shipped examples cover TypeScript, Go, Python, PHP, Rust, Java, and Ruby under
 `.skill/steering/examples/`; the `code-examples` rule lists all of them.
 
-Optional presets live in `.skill/steering/presets/`:
+Optional presets live in `.skill/steering/available-presets/`; core defaults live in `.skill/steering/default-presets/`.
 
 - architecture: `architecture-hexagonal`, `architecture-onion`, `architecture-clean`, `architecture-ddd`, `architecture-cqrs`, `architecture-event-driven`
 - code style: `code-style-typescript`, `code-style-go`, `code-style-python`, `code-style-php`, `code-style-rust`, `code-style-java`, `code-style-ruby`, `code-style-sonarqube`
@@ -1153,7 +1157,7 @@ skills.sh.json            Vercel skills ecosystem repository page config
 .skill/
   constitution/           default source of truth for how code is written
   personas/               PM, DEV, QE + optional catalog
-  steering/               core rules, optional presets, and example snippets
+  steering/               default-presets, available-presets, examples
   templates/profiles/     backend, frontend, infra, monorepo, custom
   templates/artifacts/    PRD, TRD, Gherkin, questionnaire, ADR, prompt, CR, handover
   schemas/                config, state, event, manifest, prompt, report, steering

@@ -200,7 +200,7 @@ orchid-sdd/
 │   │   ├── guidelines/
 │   │   └── testing/
 │   ├── personas/                  # PM, DEV, QE and the optional catalog
-│   ├── steering/                  # core rules, optional presets, example snippets
+│   ├── steering/                  # default/available presets and examples
 │   ├── templates/
 │   │   ├── profiles/              # backend, frontend, infra, monorepo
 │   │   └── artifacts/             # prd, trd, gherkin, questionnaire, adr, prompt, cr, handover
@@ -1549,8 +1549,13 @@ can judge semantics.
 ```text
 project files (.orchid/steering/, domains/*/steering/)
   → project override by same ID
-  → skill defaults (.skill/steering/)
+  → skill catalog
+       .skill/steering/default-presets/    # enabled by setup
+       .skill/steering/available-presets/  # opt-in rules
 ```
+
+Both skill folders are one catalog; the split separates the automatically enabled baseline from
+optional presets. They share IDs, phase mappings, overrides, and `diff` behavior.
 
 `steering.enabled` lists the available rules. `steering.phases.<phase>` is the ordered active
 set; it overrides the rule’s default `phases`. `steering.overrides.<ID>` can set `authority`,
@@ -2009,7 +2014,7 @@ Every skill artifact is identified by its **logical path** — the path inside `
 |---|---|---|
 | `templates/artifacts/prd.md` | `.skill/templates/artifacts/prd.md` | `.orchid/custom/templates/artifacts/prd.md` |
 | `personas/DBA.md` | `.skill/personas/DBA.md` | `.orchid/personas/DBA.md` |
-| `steering/architecture-boundaries.md` | `.skill/steering/architecture-boundaries.md` | `.orchid/steering/architecture-boundaries.md` |
+| `steering/architecture-boundaries.md` | `.skill/steering/default-presets/architecture-boundaries.md` | `.orchid/steering/architecture-boundaries.md` |
 | `constitution/guidelines/api.md` | `.skill/constitution/guidelines/api.md` | `.orchid/constitution/guidelines/api.md` |
 
 Resolution order: project customization → profile pack → skill default. Front matter may declare:

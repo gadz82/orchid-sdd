@@ -7,31 +7,31 @@ authority: advisory
 phases: [discovery, assessment, planning, build, code_review, logic_review]
 tags: [examples, style, snippets, tests, cross-language]
 examples:
-  - path: examples/typescript/domain-service.ts
+  - path: ../examples/typescript/domain-service.ts
     title: "Domain service with an explicit port"
     language: typescript
-  - path: examples/typescript/hexagonal-port.ts
+  - path: ../examples/typescript/hexagonal-port.ts
     title: "Port and adapter boundary"
     language: typescript
-  - path: examples/typescript/domain-service.test.ts
+  - path: ../examples/typescript/domain-service.test.ts
     title: "Test at the domain boundary"
     language: typescript
-  - path: examples/go/domain_service.go
+  - path: ../examples/go/domain_service.go
     title: "Go domain service with a repository port"
     language: go
-  - path: examples/python/domain_service.py
+  - path: ../examples/python/domain_service.py
     title: "Python domain service with a protocol"
     language: python
-  - path: examples/php/DomainService.php
+  - path: ../examples/php/DomainService.php
     title: "PHP domain service with a repository interface"
     language: php
-  - path: examples/rust/domain_service.rs
+  - path: ../examples/rust/domain_service.rs
     title: "Rust domain service with a trait"
     language: rust
-  - path: examples/java/DeactivateUser.java
+  - path: ../examples/java/DeactivateUser.java
     title: "Java domain service with an interface"
     language: java
-  - path: examples/ruby/domain_service.rb
+  - path: ../examples/ruby/domain_service.rb
     title: "Ruby domain service with dependency injection"
     language: ruby
 ---
