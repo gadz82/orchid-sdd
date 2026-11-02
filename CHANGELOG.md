@@ -30,7 +30,7 @@ Claude Code packaging:
 - Added first-class steering rules: Markdown contracts with front matter for architecture,
   code examples, code style, repository flow, and custom process rules.
 - Added `steering.enabled`, `steering.search_paths`, `steering.overrides`, and
-  `steering.phases`; setup seeds six core rules and `.orchid/steering/README.md`.
+  `steering.phases`; setup seeds nine core rules and `.orchid/steering/README.md`.
 - Added `steering list|show|context`, phase-aware steering output, gate audit metadata, and
   steering validation in `doctor` and `diff`.
 - Applied steering to Discovery and Logic Review with `discovery/steering.md` and
@@ -44,6 +44,10 @@ Claude Code packaging:
   assignments, agent/model mappings, and `route` detection with unknown/mismatch alerts.
 - Added current identity detection through explicit flags/environment, with `match`,
   `mismatch`, `unknown`, and `unassigned` states. The CLI never switches models or agents.
+- Added prompt execution state (`prompt start|step|complete|fail|waive`), run/attempt events,
+  matrix status updates, and replay through `resume`.
+- Added portable `handoff prepare/list/show/accept` checkpoints for switching harnesses without
+  automatic model or agent replacement.
 - Added a seven-step, plain-language setup wizard with a steering step for core rules,
   optional presets, and Discovery/Logic Review application.
 - Added agent-friendly setup flags: `--steering-preset`, `--no-steering`,

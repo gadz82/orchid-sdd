@@ -464,6 +464,11 @@ export function resume(root, args) {
   let title = null;
   let lastClosed = null;
   let last = null;
+  let prompts = {};
+  let runs = {};
+  let currentPrompt = null;
+  let currentRun = null;
+  let lastHandoff = null;
   const gates = Object.fromEntries(Object.keys(state.gates).map((gate) => [gate, "pending"]));
 
   for (const event of events) {
@@ -473,6 +478,11 @@ export function resume(root, args) {
       active = payload.id;
       phase = "intent";
       title = payload.title || null;
+      prompts = {};
+      runs = {};
+      currentPrompt = null;
+      currentRun = null;
+      lastHandoff = null;
       for (const gate of Object.keys(gates)) gates[gate] = "pending";
       gates.G0 = "passed";
     } else if (event.type === "iteration.closed" || event.type === "iteration.abandoned") {
@@ -488,10 +498,39 @@ export function resume(root, args) {
       gates[payload.gate] = "passed";
     } else if (event.type === "gate.failed" && payload.gate) {
       gates[payload.gate] = "failed";
+    } else if (event.type === "prompt.started" && payload.prompt && payload.run) {
+      prompts[payload.prompt.id] = { ...payload.prompt };
+      runs[payload.run.id] = { ...payload.run };
+      currentPrompt = payload.prompt.id;
+      currentRun = payload.run.id;
+    } else if (event.type === "prompt.step" && payload.prompt) {
+      if (prompts[payload.prompt]) prompts[payload.prompt].step = payload.step;
+      if (payload.run && runs[payload.run]) runs[payload.run].step = payload.step;
+    } else if (
+      ["prompt.completed", "prompt.failed", "prompt.waived"].includes(event.type) &&
+      payload.prompt
+    ) {
+      if (prompts[payload.prompt]) prompts[payload.prompt].status = payload.status;
+      if (payload.run && runs[payload.run]) {
+        runs[payload.run].status = payload.status;
+      }
+      if (currentPrompt === payload.prompt) {
+        currentPrompt = null;
+        currentRun = null;
+      }
+    } else if (event.type === "handoff.created" && payload.id) {
+      lastHandoff = payload.id;
+    } else if (event.type === "handoff.accepted" && payload.id) {
+      lastHandoff = payload.id;
     }
   }
 
   state.activeIteration = active;
+  state.prompts = prompts;
+  state.runs = runs;
+  state.currentPrompt = currentPrompt;
+  state.currentRun = currentRun;
+  state.lastHandoff = lastHandoff;
   state.lastIteration = lastClosed || state.lastIteration;
   state.phase = phase;
   state.iterationTitle = title || state.iterationTitle;
@@ -534,6 +573,12 @@ export function status(root, args) {
   const routing = PHASE_NAMES.includes(state.phase)
     ? routingFor(root, config, state, state.phase)
     : null;
+  const currentPrompt = state.currentPrompt && state.prompts[state.currentPrompt]
+    ? state.prompts[state.currentPrompt]
+    : null;
+  const currentRun = currentPrompt && state.currentRun
+    ? state.runs[state.currentRun] || null
+    : null;
   const payload = {
     project: config.project.name,
     profile: config.project.profile,
@@ -546,6 +591,8 @@ export function status(root, args) {
     history: manifest ? manifest.history.length : 0,
     matrix,
     workspace,
+    currentPrompt,
+    currentRun,
     steering: steering.rules.map((rule) => rule.id),
     steeringArtifact: steering.rules.length ? steeringArtifact(state.phase) : null,
     routing,
@@ -565,6 +612,11 @@ export function status(root, args) {
   if (matrix) {
     const counts = Object.entries(matrix.counts).map(([key, value]) => `${key}=${value}`).join(" ");
     process.stdout.write(`Prompts  ${matrix.total} (${counts})\n`);
+  }
+  if (currentPrompt) {
+    process.stdout.write(
+      `Prompt   ${currentPrompt.id} (${currentPrompt.status}) step=${currentPrompt.step || "—"} attempt=${currentPrompt.attempt || 1}\n`,
+    );
   }
   if (steering.rules.length) {
     process.stdout.write(

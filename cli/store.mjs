@@ -56,6 +56,11 @@ export function newState(cfg, configHash) {
     phase: "setup",
     gates: Object.fromEntries(GATES.map((gate) => [gate, "pending"])),
     locks: {},
+    prompts: {},
+    runs: {},
+    currentPrompt: null,
+    currentRun: null,
+    lastHandoff: null,
     lastEvent: null,
   };
 }
@@ -63,7 +68,13 @@ export function newState(cfg, configHash) {
 export function readState(root) {
   const file = path.join(root, ".orchid", "state.json");
   if (!exists(file)) throw new OrchidError("no .orchid/state.json; run `orchid-sdd setup` first");
-  return readJson(file);
+  const state = readJson(file);
+  state.prompts = state.prompts || {};
+  state.runs = state.runs || {};
+  state.currentPrompt = state.currentPrompt || null;
+  state.currentRun = state.currentRun || null;
+  state.lastHandoff = state.lastHandoff || null;
+  return state;
 }
 
 export function writeState(root, state) {

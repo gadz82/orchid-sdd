@@ -21,6 +21,8 @@ import { migrateCommand } from "./migration.mjs";
 import { installSkill } from "./skill.mjs";
 import { steeringCommand } from "./steering.mjs";
 import { routeCommand } from "./models.mjs";
+import { promptCommand } from "./prompts.mjs";
+import { handoffCommand } from "./handoff.mjs";
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -30,7 +32,7 @@ const VALUE_OPTIONS = new Set([
   "path", "wave", "prompt", "id", "alias", "relation", "persona",
   "persona-file", "knowledge-folder", "docblocks-folder", "constitution-folder",
   "customizations-folder", "repo", "output", "scope", "agent", "dest", "phase",
-  "steering-preset", "current-agent", "current-model",
+  "steering-preset", "current-agent", "current-model", "step", "reason",
 ]);
 const REPEATABLE = new Set([
   "relation",
@@ -98,6 +100,9 @@ Setup and inspection
   diff                        Show overrides versus skill defaults (--content)
   steering list|show|context  Inspect and apply phase steering rules
   route                       Resolve the expected agent/model for a phase or prompt
+  prompt list|show            Inspect prompt execution state
+  prompt start|step|complete|fail|waive  Track development-prompt execution
+  handoff list|show|prepare|accept  Save or accept a portable execution handoff
 
 Iteration
   start "<title>"             Start an iteration (--technical-only, --rigor S|M|L)
@@ -140,6 +145,19 @@ steering options
 route options
   --phase intent|discovery|assessment|planning|build|code_review|logic_review
   --prompt P-001  --current-agent NAME  --current-model NAME  --json
+
+prompt options
+  prompt list [--json]
+  prompt show P-001 [--json]
+  prompt start P-001 [--step NAME]
+  prompt step P-001 --step NAME
+  prompt complete|fail|waive P-001 [--note TEXT] [--evidence PATH] [--json]
+
+handoff options
+  handoff list [--json]
+  handoff show ID [--json]
+  handoff prepare [--reason TEXT] [--json]
+  handoff accept ID [--current-agent NAME] [--current-model NAME] [--json]
 
 record options
   --type Requirement|Scenario|Decision|Prompt|CodeUnit|...
@@ -357,6 +375,24 @@ export async function main(argv) {
         return routeCommand(root, {
           phase: args.phase,
           prompt: args.prompt,
+          currentAgent: args["current-agent"],
+          currentModel: args["current-model"],
+          json,
+        });
+      case "prompt":
+        return promptCommand(root, {
+          action: positional[0] || "list",
+          id: positional[1] || args.id,
+          step: args.step,
+          note: args.note,
+          evidence: args.evidence,
+          json,
+        });
+      case "handoff":
+        return handoffCommand(root, {
+          action: positional[0] || "list",
+          id: positional[1] || args.id,
+          reason: args.reason,
           currentAgent: args["current-agent"],
           currentModel: args["current-model"],
           json,

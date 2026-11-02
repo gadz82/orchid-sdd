@@ -31,6 +31,7 @@ export function agentsBlock(knowledgeFolder, constitutionFolder = ".orchid/const
 - Follow \`${constitutionFolder}/\` for how code is written here.
 - Read \`orchid-sdd steering context --phase <phase>\` before Discovery and Logic Review; apply every active rule and cite its ID.
 - Run \`orchid-sdd route --phase <phase>\` before work; if the current model/agent is unknown or mismatched, tell the user. Never switch automatically.
+- Track development prompts with \`orchid-sdd prompt start|step|complete\`; save a checkpoint with \`orchid-sdd handoff prepare\` before changing harness.
 ${AGENTS_END}
 `;
 }

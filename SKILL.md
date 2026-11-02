@@ -47,6 +47,8 @@ Implementers, reviewers, and assessment lenses run as subagents with fresh conte
 | Inspect steering | `orchid-sdd steering list [--phase P] [--json]` / `steering show <ID>` |
 | Apply phase steering | `orchid-sdd steering context --phase <phase>` |
 | Resolve model/agent | `orchid-sdd route --phase <phase> [--prompt P-003] [--current-agent NAME] [--current-model NAME]` |
+| Track a prompt | `orchid-sdd prompt start P-003 --step implement` / `prompt step` / `prompt complete` |
+| Save/resume a handoff | `orchid-sdd handoff prepare` / `handoff list` / `handoff accept <id>` |
 | Convert an existing project/workspace | `orchid-sdd migrate scan\|backup\|init\|status\|finalize` |
 | Validate setup/sources | `orchid-sdd doctor [--ci] [--online] [--fix]` |
 | Start an iteration | `orchid-sdd start "<title>" [--technical-only] [--rigor S\|M\|L]` |
@@ -180,6 +182,8 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 - Select ready prompts; create a worktree and branch `orchid/<iteration>/<prompt-id>`.
 - Run `orchid-sdd route --phase build --prompt <prompt-id>` before execution and alert the user
   on `unknown` or `mismatch`.
+- Record the prompt with `orchid-sdd prompt start <prompt-id> --step implement`; advance safe
+  steps with `prompt step` and finish with `prompt complete|fail|waive`.
 - Give each implementer a context pack, not the repository.
 - The orchestrator runs acceptance tests in a clean environment; the implementer's claim
   is not evidence.
@@ -261,6 +265,33 @@ Routing is declarative. The CLI never loads, launches, or switches a model or co
   explicitly accept the current runtime. Never switch silently.
 - With `models.mismatch: block`, a confirmed mismatch makes `route` fail; it still does not
   switch anything.
+
+# Prompt execution state
+
+Development prompts are tracked independently from the phase:
+
+- `orchid-sdd prompt start P-003 --step implement` creates a run with an attempt number.
+- `orchid-sdd prompt step P-003 --step tests` records a safe internal step.
+- `orchid-sdd prompt complete P-003 --evidence <path>` records the terminal state.
+- `prompt fail` and `prompt waive` record the other terminal states.
+- `prompt list` and `prompt show` are the source for the active run.
+- `resume` replays prompt/run events and restores the current cursor.
+
+Do not start a second prompt while another is active. Do not edit matrix status by hand when
+the CLI can record it.
+
+# Handoff
+
+`handoff` is for switching harnesses or preserving a resumable checkpoint; it is not the final
+human `handover`.
+
+- `orchid-sdd handoff prepare --reason "switch model"` writes a JSON checkpoint containing the
+  iteration, phase, prompt, run, step, routing, workspace state, and last event.
+- `handoff list` and `handoff show <id>` inspect checkpoints.
+- `handoff accept <id> --current-agent ... --current-model ...` records that a new harness
+  resumed it.
+- A handoff never switches execution automatically. The new agent must load it and continue from
+  the recorded prompt/step.
 
 # Memory contract
 

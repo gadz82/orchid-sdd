@@ -19,6 +19,11 @@
       "additionalProperties": { "enum": ["pending", "passed", "failed", "in_progress"] }
     },
     "locks": { "type": "object" },
+    "prompts": { "type": "object" },
+    "runs": { "type": "object" },
+    "currentPrompt": { "type": ["string", "null"] },
+    "currentRun": { "type": ["string", "null"] },
+    "lastHandoff": { "type": ["string", "null"] },
     "lastEvent": { "type": ["string", "null"] },
     "migration": { "type": ["object", "null"] }
   }

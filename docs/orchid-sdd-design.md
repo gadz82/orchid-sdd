@@ -488,6 +488,11 @@ The orchestrator is the primary agent session in the host harness — in OpenCod
     "G8": "pending"
   },
   "locks": { "manifest": "orchestrator/run_01J..." },
+  "currentPrompt": "P-003",
+  "currentRun": "run_01J...",
+  "prompts": { "P-003": { "status": "running", "step": "tests", "attempt": 1 } },
+  "runs": { "run_01J...": { "prompt": "P-003", "status": "running" } },
+  "lastHandoff": null,
   "lastEvent": "evt_01J..."
 }
 ```
@@ -549,6 +554,8 @@ The skill exposes one explicit entry point with subcommands. Running `/orchid-sd
 | `/orchid-sdd steering list` / `steering show <ID>` | any | Inspect effective rules, phases, authority, examples, and overrides | — |
 | `/orchid-sdd steering context --phase P` | any | Emit the active rule pack and evidence artifact for a phase | — |
 | `/orchid-sdd route --phase P [--prompt P-003]` | any | Resolve expected effort, agent, and model; report match, mismatch, unknown, or unassigned | — |
+| `/orchid-sdd prompt start\|step\|complete\|fail\|waive` | 5 | Record development-prompt run, step, attempt, evidence, and terminal state | G5 per prompt |
+| `/orchid-sdd handoff prepare\|list\|show\|accept` | any | Save or accept a portable execution checkpoint | — |
 | `/orchid-sdd start "<title>"` | 1 | Validate the title, produce PRD and TRD, choose rigor; clean-tree guard across workspace repos (`--allow-dirty` to override) | G1 |
 | `/orchid-sdd discover` | 2 | PM-led requirements capture, Gherkin, consistency scan, questionnaires | G2 |
 | `/orchid-sdd assess` | 3 | Parallel technical impact analysis, negotiation, ADRs, go/no-go | G3 |
@@ -1328,6 +1335,7 @@ PRD §3.2 + Gherkin S-003 + prior iteration 2026-09-10-sso
 - Never edit `.knowledge/**`, the manifest, or docblocks of code you do not own. Write code; propose knowledge.
 - Follow `.orchid/constitution/` for how code is written here.
 - Read `orchid-sdd steering context --phase <phase>` before Discovery and Logic Review; apply every active rule and cite its ID.
+- Run `orchid-sdd route --phase <phase>` before work; tell the user if the current model/agent is unknown or mismatched. Never switch automatically.
 ```
 
 ### 7.8 Write protocol and concurrency
@@ -1646,9 +1654,9 @@ but never infers a model. If the runtime identity is unknown, the agent must tel
 is expected and let the user decide whether to switch. `models.mismatch: block` can turn a
 confirmed mismatch into a non-zero route result; it still does not switch.
 
-This is the first slice of multi-harness support. Reliable mid-flow switching additionally
-requires step-level run state, prompt leases, checkpoints, and handoff artifacts; those are not
-part of this routing implementation.
+This is the routing slice of multi-harness support. Prompt/run state and a basic handoff
+checkpoint are implemented separately; prompt leases, mid-step checkpoints, and automatic
+reconciliation remain future work.
 
 ---
 
@@ -1841,6 +1849,31 @@ flowchart TB
 | P-004 | 3 | P-002, P-003 | `src/auth/session.ts` | DEV | planned | — | — | — | cross-device revoke |
 
 Statuses: `planned`, `ready`, `running`, `blocked`, `in_cr`, `changes_requested`, `escalated`, `done`, `failed`, `waived`.
+
+#### 11.3.1 Prompt execution state and handoff
+
+The CLI records prompt state separately from phase state:
+
+```text
+orchid-sdd prompt start P-003 --step implement
+orchid-sdd prompt step P-003 --step tests
+orchid-sdd prompt complete P-003 --evidence plan/runs/P-003.md
+orchid-sdd prompt fail|waive P-003 --note "..."
+```
+
+Each transition emits an append-only event (`prompt.started`, `prompt.step`,
+`prompt.completed`, `prompt.failed`, `prompt.waived`) and updates the prompt matrix when the
+matrix artifact exists. `state.json` carries a projection with `currentPrompt`, `currentRun`,
+`prompts`, and `runs`; `resume` replays the events.
+
+`orchid-sdd handoff prepare` writes a portable checkpoint under the active iteration's
+`handoff/` directory. It contains the phase, current prompt/run/step, prompt and run snapshots,
+routing assignment, workspace/Git state, and last event. It is **not** the final human
+`handover`. `handoff accept` records that another harness resumed the checkpoint; the CLI does
+not switch execution, acquire a lease, or modify the working tree.
+
+This implements prompt/run state and a checkpoint. Prompt leases, mid-step checkpoints, and
+automatic reconciliation are still required before unattended harness switching is safe.
 
 ### 11.4 The ephemeral bus
 
@@ -2337,7 +2370,7 @@ No decisions remain open. Decisions that arise during implementation are recorde
 | **M4 — Closure and handover** | Audit move, freeze, release notes, handover/tour generator, external MCP sources, full eval regression suite | A full iteration closes, archives, and produces a verified tour; missing MCP blocks with a clear message |
 | **M5 — Workspace and migration** (v0.2.0) | Nested-repo detection, root-owned workspace config, per-repo `extends` overrides, project-scoped memory, Git state/clean-tree guards, `migrate scan/backup/init/status/finalize`, backup manifest and LLM reconstruction plan | A multi-repo workspace and a legacy `.knowledge` project both migrate non-destructively; workspace status/doctor pass; migration reaches `phase: ready` |
 | **M6 — Steering rules** (unreleased) | ID-resolved architecture, SOLID, dependency inversion/DI, SAGA, example, style, repository, and process rules; cross-language examples; phase maps for Discovery and Logic Review; project overrides; `steering list/show/context`; gate audit metadata | Setup seeds defaults; `doctor` validates references and examples; Discovery and Logic Review emit the rule pack and evidence artifact |
-| **M7 — Model routing** (current slice) | Effort enum, phase and prompt assignments, agent/model mappings, `route`, environment/flag identity, mismatch/unknown alerts | Route resolves phase and development-prompt effort; unknown/mismatch is explicit and never auto-switches |
+| **M7 — Model routing and execution state** (current) | Effort enum, phase and prompt assignments, agent/model mappings, `route`, identity alerts, prompt/run state, `resume` replay, handoff checkpoints | Route resolves phase and development-prompt effort; unknown/mismatch is explicit and never auto-switches; a prompt can be reconstructed or checkpointed |
 
 The order is deliberate: memory and validation first, because every later phase depends on them. Building the orchestrator before the manifest would create a system that cannot explain itself.
 

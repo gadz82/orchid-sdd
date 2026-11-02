@@ -144,6 +144,23 @@ The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator run
 The route command never switches models or agents. It reports `match`, `mismatch`, `unknown`, or
 `unassigned`; the agent must relay a non-match to the user.
 
+### Prompt execution and handoff
+
+| Operation | Command | Use case |
+|---|---|---|
+| Start a development prompt | `orchid-sdd prompt start P-001 --step implement` | Record the active run and its first step |
+| Advance a step | `orchid-sdd prompt step P-001 --step tests` | Record a safe internal step |
+| Complete a prompt | `orchid-sdd prompt complete P-001 --note "..."` | Mark the prompt and its run done |
+| Fail or waive | `orchid-sdd prompt fail P-001 --note "..."` / `prompt waive P-001` | Record the terminal state |
+| Inspect state | `orchid-sdd prompt list --json` / `prompt show P-001` | Reconstruct the current run |
+| Save a handoff | `orchid-sdd handoff prepare --reason "switch model"` | Write a portable checkpoint |
+| Inspect handoffs | `orchid-sdd handoff list --json` | Find a saved checkpoint |
+| Accept a handoff | `orchid-sdd handoff accept <id> --current-agent ...` | Record that a new harness resumed it |
+
+Prompt events are append-only and `resume` rebuilds prompt/run state from them. `handoff` is
+separate from the final human `handover`: it preserves the active prompt, run, step, routing,
+workspace state, and last event for another harness. It does not switch anything automatically.
+
 ### Workspace (multi-repo)
 
 | Operation | Command | Use case |
@@ -1229,6 +1246,8 @@ cli/                      zero-dependency implementation
   config.mjs              defaults, validation, rendering, detection
   registry.mjs            profiles, personas, aliases, routing
   models.mjs              model/effort routing and identity checks
+  prompts.mjs             prompt/run/step execution state
+  handoff.mjs             portable execution checkpoints
   steering.mjs            steering resolution, validation, list/show/context
   store.mjs               state, events, projection, indexes, snapshots
   setup.mjs               setup wizard outputs
@@ -1268,8 +1287,9 @@ The suite exercises setup, doctor, config validation, the memory loop, lint, gat
 the full lifecycle, abandon, history recall, resume, workspace detection, project-scoped
 memory, clean-tree guards, migration backup/scaffold/finalize, the Claude Code plugin
 manifest, skill pointer, CLI wrapper, persona dossier consistency, steering setup/resolution,
-phase context, model effort resolution and mismatch alerts, project rule overrides, npm skill
-installation, and every profile’s personas/tests/constitution pack in temporary projects.
+phase context, model effort resolution and mismatch alerts, prompt/run state, handoff
+checkpoints, project rule overrides, npm skill installation, and every profile’s
+personas/tests/constitution pack in temporary projects.
 
 ## Known limits (v0.2)
 
@@ -1290,6 +1310,8 @@ installation, and every profile’s personas/tests/constitution pack in temporar
   a rule.
 - Model/agent identity is host-specific. The CLI resolves expected routing and compares declared
   or environment-provided identity; it does not detect an unavailable model or switch agents.
+- Prompt handoff is a checkpoint, not an automatic harness switch. Another agent must explicitly
+  accept it and continue from the saved prompt/run state.
 - MCP sources are validated but not probed (no MCP client adapter yet); `doctor --online`
   probes Git sources.
 - The Claude Code plugin ships a top-level `bin/` so Claude Code can expose the CLI;
