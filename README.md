@@ -42,7 +42,7 @@ The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator run
 
 | Operation | Command | Use case |
 |---|---|---|
-| Guided setup | `orchid-sdd setup` | First install; asks profile, paths, personas, steering |
+| Guided setup | `orchid-sdd setup` | First install; asks profile, paths, personas, steering, model routing |
 | Automated setup | `orchid-sdd setup --profile backend --yes` | Bootstrap or CI without prompts |
 | Agent-friendly setup | `orchid-sdd setup --yes --profile backend --project acme --json` | Explicit answers plus a machine-readable result |
 | Choose steering presets | `orchid-sdd setup --yes --steering-preset architecture-hexagonal --steering-preset repository-trunk-based` | Select architecture and repository presets |
@@ -276,14 +276,15 @@ orchid-sdd start "Add passkey login to the customer portal for returning users"
 ```
 
 `setup` asks for the profile, project name, the four workspace paths, workspace mode, persona
-management, and steering. For automation, use `--profile`, `--project`, `--persona`, `--persona-file`, the
-four `--*-folder` flags, and the steering flags with `--yes`. Steering defaults are enabled
-automatically; edit `steering` in `orchid-sdd.yml` to select more presets or add project
-rules later.
+management, steering, and optional model/effort routing. For automation, use `--profile`,
+`--project`, `--persona`, `--persona-file`, the four `--*-folder` flags, and the steering flags
+with `--yes`. Steering defaults are enabled automatically; edit `steering` in
+`orchid-sdd.yml` to select more presets or add project rules later. Model routing is
+wizard/config-driven; agent-driven setup should write the `models` section explicitly.
 
 ### What the wizard asks
 
-The interactive wizard has seven short steps:
+The interactive wizard has eight short steps:
 
 | Step | Question | What it means |
 |---|---|---|
@@ -293,7 +294,8 @@ The interactive wizard has seven short steps:
 | 4 | Choose workspace mode | Whether the root contains several Git repositories |
 | 5 | Choose who participates | PM, DEV, QE, plus any specialist or custom roles |
 | 6 | Choose steering rules | Standing rules for architecture, examples, style, and repository flow |
-| 7 | Review and create | Show every choice; nothing is written until you confirm |
+| 7 | Choose routing | Optional agent/model mapping for each effort and phase |
+| 8 | Review and create | Show every choice; nothing is written until you confirm |
 
 Most choices are written to plain YAML and can be changed later; changing the profile itself
 does not regenerate dependent files.
@@ -303,6 +305,10 @@ code-style preset, and one repository workflow preset. It also asks whether stee
 to Discovery and Logic Review. Enter accepts the default; type `none` to skip an optional
 preset. For a multi-language project, add more `--steering-preset` flags or list the chosen
 style presets in `orchid-sdd.yml`.
+
+Step 7 is optional. It asks whether to customize routing, then guides you through the default
+effort and every phase effort, followed by an agent/model mapping for each effort actually
+used. Press Enter at a mapping to leave it unassigned.
 
 Agents and CI should skip the prompts and pass explicit answers:
 

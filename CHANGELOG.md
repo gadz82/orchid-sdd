@@ -48,10 +48,11 @@ Claude Code packaging:
   `mismatch`, `unknown`, and `unassigned` states. The CLI never switches models or agents.
 - Added prompt execution state (`prompt start|step|complete|fail|waive`), run/attempt events,
   matrix status updates, and replay through `resume`.
+- Added an optional wizard step that guides phase efforts and effort-to-agent/model mappings.
 - Added portable `handoff prepare/list/show/accept` checkpoints for switching harnesses without
   automatic model or agent replacement.
-- Added a seven-step, plain-language setup wizard with a steering step for core rules,
-  optional presets, and Discovery/Logic Review application.
+- Added an eight-step, plain-language setup wizard with steering and optional model-routing
+  steps.
 - Added agent-friendly setup flags: `--steering-preset`, `--no-steering`,
   `--no-steering-discovery`, `--no-steering-logic-review`, and `--json`.
 

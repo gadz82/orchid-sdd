@@ -102,9 +102,11 @@ G2, and so on. Use `gate status` to inspect the current state.
 
 ## Phase 0 — Setup
 
-Run `orchid-sdd setup` and follow the seven steps: profile, project name, paths, workspace
-mode, personas, steering, review. Steering defaults are seeded; choose optional presets and
-whether rules apply to Discovery and Logic Review. Agents should use `--yes` plus explicit
+Run `orchid-sdd setup` and follow the eight steps: profile, project name, paths, workspace
+mode, personas, steering, model routing, review. Steering defaults are seeded; choose optional
+presets and whether rules apply to Discovery and Logic Review. Model routing is optional; if
+enabled, choose the default effort, each phase’s effort, and an agent/model for each used
+effort. Agents should use `--yes` plus explicit
 flags and `--json` instead of answering prompts. Setup is idempotent but never overwrites user
 files without `--force`. If an MCP or Git source is declared, `doctor --online` must pass
 before G1.

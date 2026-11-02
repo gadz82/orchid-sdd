@@ -672,6 +672,7 @@ export function renderConfig({
   paths = {},
   workspace = null,
   steering = DEFAULT_CONFIG.steering,
+  models = DEFAULT_CONFIG.models,
 }) {
   const knowledgeFolder = paths.knowledgeFolder || ".knowledge";
   const docblocksFolder = paths.docblocksFolder || "docs/knowledge/docblocks";
@@ -730,7 +731,7 @@ constitution:
   lock: true
 
 ${renderSteeringBlock(steering)}
-${renderModelsBlock()}
+${renderModelsBlock(models)}
 sources: []
 
 phases:

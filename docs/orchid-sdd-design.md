@@ -646,7 +646,7 @@ Each phase follows the same contract: purpose, lead persona, inputs, outputs, ru
 - Idempotent. Re-running setup never overwrites a user file without showing a diff and asking.
 - `--dry-run` prints every planned write; `--json` makes the result machine-readable.
 - Profiles generate sensible defaults, not a lock-in: backend, frontend, infrastructure-only, monorepo, custom.
-- The seven wizard steps are profile, project name, paths, workspace mode, personas, steering, and review.
+- The eight wizard steps are profile, project name, paths, workspace mode, personas, steering, model routing, and review.
 - Advanced source, execution, and governance changes remain config/file/agent work; skipping is always possible.
 - The wizard validates the generated config and prints the exact next command; run `doctor` explicitly after setup.
 
@@ -2057,12 +2057,16 @@ sensible default; nothing is written until step 7 is confirmed.
 6. **Choose steering rules.** Enable the nine core rules, optionally add one architecture, one
    code-style, and one repository preset, and choose whether rules apply to Discovery and
    Logic Review (§9.4).
-7. **Review and create.** Print every choice, then write the config, directories, manifest v0,
+7. **Choose model routing.** Optionally set the default effort, the effort for each phase, and
+   the agent/model mapping for the efforts actually used (§9.5). Skipping leaves efforts
+   unassigned and allows the default fallback.
+8. **Review and create.** Print every choice, then write the config, directories, manifest v0,
    state, CI job, `AGENTS.md` contract, and steering starter; validate the generated config;
    print the first command. `doctor` remains the explicit follow-up health check.
 
-Advanced configuration such as external sources, model routing, execution tuning, and
-governance thresholds remains config/file/agent work. Migration has its own scaffold and plan
+Advanced configuration such as external sources, execution tuning, and governance thresholds
+remains config/file/agent work; model routing is available in the wizard and remains editable
+in `orchid-sdd.yml`. Migration has its own scaffold and plan
 (§22).
 
 **Agent-friendly mode.** An agent should pass `--yes` and explicit flags instead of answering

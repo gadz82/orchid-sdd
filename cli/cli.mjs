@@ -251,6 +251,7 @@ export async function main(argv) {
             options.steeringPresets = wizard.steering.presets;
             options.steeringDiscovery = wizard.steering.discovery;
             options.steeringLogicReview = wizard.steering.logicReview;
+            options.models = wizard.models;
           }
         }
         runSetup(root, SKILL_ROOT, options);

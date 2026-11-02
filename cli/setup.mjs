@@ -3,6 +3,7 @@ import path from "node:path";
 import readline from "node:readline/promises";
 import {
   DEFAULT_CONFIG,
+  EFFORTS,
   PHASE_NAMES,
   detectProfile,
   detectProjectName,
@@ -371,6 +372,7 @@ export function runSetup(root, skillRoot, options = {}) {
     paths: pathConfig,
     workspace,
     steering: steeringConfig,
+    models: options.models || DEFAULT_CONFIG.models,
   });
   const configPath = path.join(root, "orchid-sdd.yml");
   const statePath = path.join(root, ".orchid", "state.json");
@@ -516,6 +518,7 @@ export function runSetup(root, skillRoot, options = {}) {
           enabled: config.steering.enabled,
           phases: config.steering.phases,
         },
+        models: config.models,
         workspace: config.workspace,
         state: { phase: state.phase, gates: state.gates },
         next: 'orchid-sdd start "<title>"',
@@ -670,7 +673,7 @@ async function managePersonas(rl, defaults, profileId, skillRoot, extrasIn, cust
   return { extras: [...new Set(extras)], customPersonas: [...custom.values()] };
 }
 
-const WIZARD_STEPS = 7;
+const WIZARD_STEPS = 8;
 
 function step(number, title, description = "") {
   process.stdout.write(`\nStep ${number}/${WIZARD_STEPS} — ${title}\n`);
@@ -723,6 +726,71 @@ async function chooseSteeringPreset(rl, catalog, label, options) {
     if (options.includes(id) && catalog.has(id)) return id;
     process.stdout.write(`Unknown preset "${answer}". Choose one of: none, ${options.join(", ")}.\n`);
   }
+}
+
+async function askEffort(rl, label, fallback) {
+  for (;;) {
+    const answer = (await rl.question(`${label} [${fallback}] (${EFFORTS.join("/")}): `))
+      .trim()
+      .toLowerCase();
+    if (!answer) return fallback;
+    if (EFFORTS.includes(answer)) return answer;
+    process.stdout.write(`Unknown effort "${answer}". Choose one of: ${EFFORTS.join(", ")}.\n`);
+  }
+}
+
+async function manageModels(rl) {
+  step(
+    7,
+    "Choose model and effort routing",
+    "This optional step records which agent/model should handle each effort level. It does not switch models. Press Enter to skip any mapping.",
+  );
+  const customize = await askYes(
+    rl,
+    "Customize effort routing now? [y/N]: ",
+    false,
+  );
+  if (!customize) {
+    return { ...DEFAULT_CONFIG.models, efforts: {}, prompts: {} };
+  }
+
+  const defaultEffort = await askEffort(
+    rl,
+    "Default effort",
+    DEFAULT_CONFIG.models.default_effort,
+  );
+  const phases = {};
+  for (const phase of PHASE_NAMES) {
+    phases[phase] = await askEffort(
+      rl,
+      `${phase} effort`,
+      DEFAULT_CONFIG.models.phases[phase] || defaultEffort,
+    );
+  }
+
+  const used = [...new Set([defaultEffort, ...Object.values(phases)])];
+  const efforts = {};
+  for (const effort of used) {
+    const normalize = (value) => {
+      const text = value.trim();
+      return ["none", "null", "-"].includes(text.toLowerCase()) ? "" : text;
+    };
+    const agent = normalize(await rl.question(`${effort} agent [none]: `));
+    const model = normalize(await rl.question(`${effort} model [none]: `));
+    if (agent || model) {
+      efforts[effort] = {
+        agent: agent || null,
+        model: model || null,
+      };
+    }
+  }
+  return {
+    ...DEFAULT_CONFIG.models,
+    default_effort: defaultEffort,
+    phases,
+    efforts,
+    prompts: {},
+  };
 }
 
 async function manageSteering(rl, catalog) {
@@ -817,6 +885,7 @@ export async function setupWizard(root, skillRoot, providedProfile, providedProj
     let extras = [];
     let customPersonas = [];
     let steeringOptions = { enabled: true, presets: [], discovery: true, logicReview: true };
+    let modelsOptions = { ...DEFAULT_CONFIG.models };
     const paths = {
       knowledgeFolder: ".knowledge",
       docblocksFolder: "docs/knowledge/docblocks",
@@ -916,9 +985,10 @@ export async function setupWizard(root, skillRoot, providedProfile, providedProj
       }
 
       steeringOptions = await manageSteering(rl, steeringCatalog);
+      modelsOptions = await manageModels(rl);
 
       step(
-        7,
+        8,
         "Review and create",
         "Check the choices below. Nothing is written until you confirm; answering no starts over at step 1.",
       );
@@ -946,6 +1016,9 @@ export async function setupWizard(root, skillRoot, providedProfile, providedProj
             : "disabled"
         }\n`,
       );
+      process.stdout.write(
+        `  Routing:    default=${modelsOptions.default_effort}; phases=${Object.values(modelsOptions.phases).join("/")}; mapped=${Object.keys(modelsOptions.efforts).join(", ") || "none"}\n`,
+      );
       const create = await askYes(rl, "Create these files now? [Y/n]: ", true);
       if (create) {
         return {
@@ -956,6 +1029,7 @@ export async function setupWizard(root, skillRoot, providedProfile, providedProj
           paths,
           workspace,
           steering: steeringOptions,
+          models: modelsOptions,
         };
       }
       process.stdout.write("\nNothing was written. Starting over so you can adjust the answers.\n");

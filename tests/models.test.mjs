@@ -29,6 +29,16 @@ function route(root, ...args) {
   return JSON.parse(result.out);
 }
 
+test("setup JSON includes the optional routing defaults", () => {
+  const root = tmp();
+  const result = cli(root, "setup", "--yes", "--profile", "backend", "--json");
+  assert.equal(result.code, 0, result.all);
+  const payload = JSON.parse(result.out);
+  assert.equal(payload.models.default_effort, "medium");
+  assert.deepEqual(payload.models.efforts, {});
+  assert.equal(payload.models.phases.assessment, "high");
+});
+
 test("route resolves phase effort and reports an unassigned mapping", () => {
   const root = tmp();
   setup(root);
