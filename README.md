@@ -88,7 +88,7 @@ The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator run
 | Handover review | `orchid-sdd handover` | Generate/verify tutorial before approval |
 | Accept handover | `orchid-sdd handover --approve` | Mark the iteration complete |
 | Abandon | `orchid-sdd abandon "descoped for this quarter"` | Archive without a release |
-| Recover state | `orchid-sdd resume` | Replay events after a crash or bad cursor |
+| Recover state | `orchid-sdd resume` | Replay events and accept the latest handoff |
 
 ### Memory
 
@@ -155,11 +155,16 @@ The route command never switches models or agents. It reports `match`, `mismatch
 | Inspect state | `orchid-sdd prompt list --json` / `prompt show P-001` | Reconstruct the current run |
 | Save a handoff | `orchid-sdd handoff prepare --reason "switch model"` | Write a portable checkpoint |
 | Inspect handoffs | `orchid-sdd handoff list --json` | Find a saved checkpoint |
-| Accept a handoff | `orchid-sdd handoff accept <id> --current-agent ...` | Record that a new harness resumed it |
+| Resume normally | `orchid-sdd resume` | Rebuild state and automatically accept the latest handoff |
+| Accept explicitly | `orchid-sdd handoff accept <id> --current-agent ...` | Record that a new harness resumed a specific checkpoint |
 
-Prompt events are append-only and `resume` rebuilds prompt/run state from them. `handoff` is
-separate from the final human `handover`: it preserves the active prompt, run, step, routing,
-workspace state, and last event for another harness. It does not switch anything automatically.
+Prompt events are append-only and `resume` rebuilds prompt/run state from them. By default,
+`resume` also finds and accepts the latest handoff for the active iteration. Use
+`--handoff <id>` to pick one or `--no-handoff` to restore state only. In the normal user flow,
+after switching the model/agent the user only invokes `/orchid-sdd resume`; the agent runs the
+CLI and reports the restored state. `handoff` is separate from the final human `handover`: it
+preserves the active prompt, run, step, routing, workspace state, and last event for another
+harness. It does not switch anything automatically.
 
 ### Workspace (multi-repo)
 
@@ -196,7 +201,7 @@ workspace state, and last event for another harness. It does not switch anything
 | Version | `orchid-sdd --version` | Check CLI compatibility |
 | Next action | `orchid-sdd status` | Read phase, gates, blockers, next step |
 | Override diff | `orchid-sdd diff [--content]` | Compare project files with skill defaults |
-| Resume | `orchid-sdd resume` | Replay events after a crash or bad cursor |
+| Resume | `orchid-sdd resume` | Replay events and accept the latest handoff |
 | Repair | `orchid-sdd doctor --fix` | Missing dirs, manifest, context |
 | Migration stage | `orchid-sdd migrate status` | Resume an interrupted migration |
 | Deliberate override | `--force` / `--allow-dirty` | Bypass a check deliberately; document why |

@@ -51,6 +51,8 @@ Claude Code packaging:
 - Added an optional wizard step that guides phase efforts and effort-to-agent/model mappings.
 - Added portable `handoff prepare/list/show/accept` checkpoints for switching harnesses without
   automatic model or agent replacement.
+- Added automatic latest-handoff acceptance to `resume`, with `--handoff` and `--no-handoff`
+  controls.
 - Added an eight-step, plain-language setup wizard with steering and optional model-routing
   steps.
 - Added agent-friendly setup flags: `--steering-preset`, `--no-steering`,

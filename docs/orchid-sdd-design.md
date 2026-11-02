@@ -1871,8 +1871,9 @@ matrix artifact exists. `state.json` carries a projection with `currentPrompt`, 
 `orchid-sdd handoff prepare` writes a portable checkpoint under the active iteration's
 `handoff/` directory. It contains the phase, current prompt/run/step, prompt and run snapshots,
 routing assignment, workspace/Git state, and last event. It is **not** the final human
-`handover`. `handoff accept` records that another harness resumed the checkpoint; the CLI does
-not switch execution, acquire a lease, or modify the working tree.
+`handover`. `orchid-sdd resume` rebuilds state and accepts the latest handoff automatically;
+`handoff accept <id>` remains available for an explicit checkpoint. The CLI does not switch
+execution, acquire a lease, or modify the working tree.
 
 This implements prompt/run state and a checkpoint. Prompt leases, mid-step checkpoints, and
 automatic reconciliation are still required before unattended harness switching is safe.

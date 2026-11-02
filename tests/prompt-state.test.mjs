@@ -80,6 +80,31 @@ test("prompt state updates an existing matrix entry", () => {
   assert.equal(matrix.prompts[0].status, "done");
 });
 
+test("resume automatically accepts the latest handoff", () => {
+  const root = tmp();
+  setup(root);
+  start(root);
+  assert.equal(cli(root, "prompt", "start", "P-001", "--step", "tests").code, 0);
+  const prepared = cli(root, "handoff", "prepare", "--reason", "switch model", "--json");
+  assert.equal(prepared.code, 0, prepared.all);
+  const handoff = JSON.parse(prepared.out);
+  const resumed = cli(
+    root,
+    "resume",
+    "--current-agent",
+    "claude-code",
+    "--current-model",
+    "anthropic/claude-sonnet-4",
+    "--json",
+  );
+  assert.equal(resumed.code, 0, resumed.all);
+  const payload = JSON.parse(resumed.out);
+  assert.equal(payload.handoff, handoff.id);
+  assert.equal(payload.currentPrompt, "P-001");
+  const state = readJson(path.join(root, ".orchid", "state.json"));
+  assert.equal(state.lastHandoff, handoff.id);
+});
+
 test("handoff prepares and accepts a portable execution checkpoint", () => {
   const root = tmp();
   setup(root);

@@ -32,6 +32,7 @@ import {
   validateSteeringRefs,
 } from "./steering.mjs";
 import { detectCurrentIdentity, evaluateRoute, resolveRoute } from "./models.mjs";
+import { acceptHandoff, findHandoff } from "./handoff.mjs";
 
 function context(root) {
   const loaded = loadConfig(root);
@@ -53,9 +54,10 @@ function steeringFor(root, config, phase, skillRoot) {
   return { map, rules: activeSteering(config, map, phase) };
 }
 
-function routingFor(root, config, state, phase) {
+function routingFor(root, config, state, phase, prompt = null) {
   const route = resolveRoute(root, config, {
     phase,
+    prompt,
     iteration: state && state.activeIteration,
   });
   return evaluateRoute(route, detectCurrentIdentity());
@@ -469,6 +471,7 @@ export function resume(root, args) {
   let currentPrompt = null;
   let currentRun = null;
   let lastHandoff = null;
+  const acceptedHandoffs = new Set();
   const gates = Object.fromEntries(Object.keys(state.gates).map((gate) => [gate, "pending"]));
 
   for (const event of events) {
@@ -522,6 +525,7 @@ export function resume(root, args) {
       lastHandoff = payload.id;
     } else if (event.type === "handoff.accepted" && payload.id) {
       lastHandoff = payload.id;
+      acceptedHandoffs.add(payload.id);
     }
   }
 
@@ -536,14 +540,62 @@ export function resume(root, args) {
   state.iterationTitle = title || state.iterationTitle;
   state.gates = gates;
   state.lastEvent = last ? last.eventId : state.lastEvent;
+
+  let acceptedHandoff = null;
+  if (active && !args.noHandoff) {
+    const requested = args.handoff || "latest";
+    const found = findHandoff(root, config, state, requested);
+    if (found) {
+      if (!acceptedHandoffs.has(found.data.id)) {
+        acceptHandoff(root, config, state, found, {
+          currentAgent: args.currentAgent,
+          currentModel: args.currentModel,
+        });
+      }
+      acceptedHandoff = found;
+    } else if (requested !== "latest") {
+      throw new OrchidError(`handoff not found: ${requested}`);
+    }
+  }
+
+  const routing = PHASE_NAMES.includes(state.phase)
+    ? routingFor(root, config, state, state.phase, state.currentPrompt)
+    : null;
   writeState(root, state);
   writeProjection(root, config, state);
   if (args.json) {
-    process.stdout.write(`${formatJson({ activeIteration: active, phase, gates, lastEvent: state.lastEvent })}\n`);
+    process.stdout.write(
+      `${formatJson({
+        activeIteration: active,
+        phase,
+        gates,
+        lastEvent: state.lastEvent,
+        handoff: acceptedHandoff ? acceptedHandoff.data.id : null,
+        currentPrompt: state.currentPrompt,
+        currentRun: state.currentRun,
+        routing,
+      })}\n`,
+    );
     return 0;
   }
   process.stdout.write(`Resumed at ${phase}${active ? ` (${active})` : ""}\n`);
+  if (acceptedHandoff) process.stdout.write(`  handoff ${acceptedHandoff.data.id}\n`);
+  if (state.currentPrompt) {
+    const prompt = state.prompts[state.currentPrompt];
+    process.stdout.write(
+      `  prompt ${state.currentPrompt} (${prompt.status}) step=${prompt.step || "—"} attempt=${prompt.attempt || 1}\n`,
+    );
+  }
   process.stdout.write(`  last event ${state.lastEvent || "none"}\n`);
+  if (routing) {
+    process.stdout.write(
+      `  routing ${routing.effort} (${routing.source}) → ${routing.expectedText || "unassigned"}\n`,
+    );
+    process.stdout.write(`  current ${routing.currentText} (${routing.status})\n`);
+    if (routing.message && ["unknown", "mismatch"].includes(routing.status)) {
+      process.stdout.write(`  [alert] ${routing.message}\n`);
+    }
+  }
   return 0;
 }
 

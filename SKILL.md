@@ -48,7 +48,7 @@ Implementers, reviewers, and assessment lenses run as subagents with fresh conte
 | Apply phase steering | `orchid-sdd steering context --phase <phase>` |
 | Resolve model/agent | `orchid-sdd route --phase <phase> [--prompt P-003] [--current-agent NAME] [--current-model NAME]` |
 | Track a prompt | `orchid-sdd prompt start P-003 --step implement` / `prompt step` / `prompt complete` |
-| Save/resume a handoff | `orchid-sdd handoff prepare` / `handoff list` / `handoff accept <id>` |
+| Save/resume a handoff | `orchid-sdd handoff prepare` / `orchid-sdd resume` / `handoff list` / `handoff accept <id>` |
 | Convert an existing project/workspace | `orchid-sdd migrate scan\|backup\|init\|status\|finalize` |
 | Validate setup/sources | `orchid-sdd doctor [--ci] [--online] [--fix]` |
 | Start an iteration | `orchid-sdd start "<title>" [--technical-only] [--rigor S\|M\|L]` |
@@ -65,7 +65,7 @@ Implementers, reviewers, and assessment lenses run as subagents with fresh conte
 | Resolve memory | `orchid-sdd recall <query>` |
 | Validate anchors/docblocks | `orchid-sdd lint [--check]` |
 | Record a gate | `orchid-sdd gate pass G# --evidence <path>` |
-| Recover after a crash | `orchid-sdd resume` |
+| Resume after crash or handoff | `orchid-sdd resume [--handoff latest\|ID]` |
 
 `/orchid-sdd <command>` and `orchid-sdd <command>` are the same operation. In the
 Claude Code plugin, invoke `/orchid-sdd:run <command>`; it reaches this same contract and
@@ -290,8 +290,9 @@ human `handover`.
 - `orchid-sdd handoff prepare --reason "switch model"` writes a JSON checkpoint containing the
   iteration, phase, prompt, run, step, routing, workspace state, and last event.
 - `handoff list` and `handoff show <id>` inspect checkpoints.
-- `handoff accept <id> --current-agent ... --current-model ...` records that a new harness
-  resumed it.
+- `orchid-sdd resume` restores state and automatically accepts the latest handoff.
+- `handoff accept <id> --current-agent ... --current-model ...` records an explicit checkpoint.
+- `resume --no-handoff` restores events without accepting a handoff.
 - A handoff never switches execution automatically. The new agent must load it and continue from
   the recorded prompt/step.
 

@@ -20,7 +20,7 @@ function handoffDir(root, config, state) {
   return path.join(paths(root, config).iterations, state.activeIteration, "handoff");
 }
 
-function listHandoffs(root, config, state) {
+export function listHandoffs(root, config, state) {
   const dir = handoffDir(root, config, state);
   if (!exists(dir)) return [];
   return fs
@@ -35,6 +35,27 @@ function listHandoffs(root, config, state) {
         return { file, data: null };
       }
     });
+}
+
+export function findHandoff(root, config, state, id = "latest") {
+  const rows = listHandoffs(root, config, state).filter(({ data }) => data);
+  if (id === "latest") return rows.length ? rows[rows.length - 1] : null;
+  return rows.find(({ data }) => data.id === id) || null;
+}
+
+export function acceptHandoff(root, config, state, found, { currentAgent, currentModel } = {}) {
+  const id = found.data.id;
+  state.lastHandoff = id;
+  appendEvent(root, config, state, {
+    type: "handoff.accepted",
+    subject: `handoff:${id}`,
+    payload: {
+      id,
+      current: detectCurrentIdentity({ agent: currentAgent, model: currentModel }),
+      acceptedAt: nowIso(),
+    },
+  });
+  return id;
 }
 
 function routeFor(root, config, state) {
@@ -154,20 +175,11 @@ export function handoffCommand(root, args = {}) {
   if (action === "accept") {
     const id = String(args.id || "");
     if (!id) throw new OrchidError("handoff accept requires a handoff id");
-    const found = listHandoffs(root, config, state).find(({ data }) => data?.id === id);
-    if (!found || !found.data) throw new OrchidError(`handoff not found: ${id}`);
-    state.lastHandoff = id;
-    appendEvent(root, config, state, {
-      type: "handoff.accepted",
-      subject: `handoff:${id}`,
-      payload: {
-        id,
-        current: detectCurrentIdentity({
-          agent: args.currentAgent,
-          model: args.currentModel,
-        }),
-        acceptedAt: nowIso(),
-      },
+    const found = findHandoff(root, config, state, id);
+    if (!found) throw new OrchidError(`handoff not found: ${id}`);
+    acceptHandoff(root, config, state, found, {
+      currentAgent: args.currentAgent,
+      currentModel: args.currentModel,
     });
     writeProjection(root, config, state);
     if (args.json) {

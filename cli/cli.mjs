@@ -32,7 +32,7 @@ const VALUE_OPTIONS = new Set([
   "path", "wave", "prompt", "id", "alias", "relation", "persona",
   "persona-file", "knowledge-folder", "docblocks-folder", "constitution-folder",
   "customizations-folder", "repo", "output", "scope", "agent", "dest", "phase",
-  "steering-preset", "current-agent", "current-model", "step", "reason",
+  "steering-preset", "current-agent", "current-model", "step", "reason", "handoff",
 ]);
 const REPEATABLE = new Set([
   "relation",
@@ -112,7 +112,7 @@ Iteration
   close --approve             Close the active iteration
   handover [--approve]        Review or accept the human handover
   abandon "<reason>"          Abandon the active iteration
-  resume                      Rebuild state from the event log
+  resume                      Rebuild state and accept the latest handoff
   migrate scan|backup|init|status|finalize   Convert an existing project or workspace
 
 Memory
@@ -158,6 +158,10 @@ handoff options
   handoff show ID [--json]
   handoff prepare [--reason TEXT] [--json]
   handoff accept ID [--current-agent NAME] [--current-model NAME] [--json]
+
+resume options
+  --handoff latest|ID  --no-handoff
+  --current-agent NAME  --current-model NAME  --json
 
 record options
   --type Requirement|Scenario|Decision|Prompt|CodeUnit|...
@@ -331,7 +335,13 @@ export async function main(argv) {
       case "abandon":
         return abandon(root, { reason: positional.join(" "), json });
       case "resume":
-        return resume(root, { json });
+        return resume(root, {
+          handoff: args.handoff,
+          noHandoff: flag(args["no-handoff"]),
+          currentAgent: args["current-agent"],
+          currentModel: args["current-model"],
+          json,
+        });
       case "diff":
         return diff(root, {
           skillRoot: SKILL_ROOT,
