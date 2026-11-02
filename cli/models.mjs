@@ -4,6 +4,13 @@ import { EFFORTS, PHASE_NAMES, loadConfig } from "./config.mjs";
 import { paths, readState } from "./store.mjs";
 import { OrchidError, exists, formatJson } from "./util.mjs";
 import { parseFrontMatter } from "./yaml.mjs";
+import {
+  expectedIdentityLabel,
+  identityLabel,
+  phaseShort,
+  routeSourceLabel,
+  routeStatusLabel,
+} from "./human.mjs";
 
 const PROMPT_RE = /^P-[0-9]{3}$/;
 
@@ -129,27 +136,35 @@ export function evaluateRoute(route, current) {
     current.model ? `model=${current.model}` : "model=unknown",
   ].join(" ");
   let message = null;
+  const subject = route.prompt
+    ? `development prompt ${route.prompt}`
+    : `${phaseShort(route.phase)} phase`;
   if (status === "unassigned") {
-    message = `No agent/model is assigned to effort "${route.effort}". Set models.efforts.${route.effort}.agent and/or .model in orchid-sdd.yml.`;
+    message = `No agent/model is assigned to the ${route.effort} effort. Set models.efforts.${route.effort}.agent and/or .model in orchid-sdd.yml.`;
   } else if (status === "unknown") {
-    message = `The current model/agent could not be recognized. ${route.phase}${route.prompt ? ` / ${route.prompt}` : ""} expects ${expectedText}. Tell the user; do not switch automatically.`;
+    message = `The current runtime could not be recognized; ${subject} expects ${expectedIdentityLabel(expected)}. Tell the user; do not switch automatically.`;
   } else if (status === "mismatch") {
-    message = `Current ${currentText} does not match expected ${expectedText}. Tell the user; do not switch automatically.`;
+    message = `Current ${identityLabel(current)} does not match expected ${expectedIdentityLabel(expected)} for ${subject}. Tell the user; do not switch automatically.`;
   }
   return { ...route, current, status, message, expectedText, currentText };
 }
 
 function printRoute(result) {
+  const subject = result.prompt
+    ? `development prompt ${result.prompt}`
+    : `${phaseShort(result.phase)} phase`;
   process.stdout.write(
-    `Route ${result.phase}${result.prompt ? ` / ${result.prompt}` : ""}\n`,
+    `Model check: ${subject} · ${result.effort} effort (${routeSourceLabel(result.source)})\n`,
   );
-  process.stdout.write(`  effort:   ${result.effort} (${result.source})\n`);
-  process.stdout.write(`  expected: ${result.expectedText || "unassigned"}\n`);
-  process.stdout.write(`  current:  ${result.currentText}\n`);
-  process.stdout.write(`  status:   ${result.status}\n`);
-  if (result.message) {
-    const label = result.status === "unassigned" ? "[info]" : "[alert]";
-    process.stdout.write(`  ${label.padEnd(10)}${result.message}\n`);
+  process.stdout.write(
+    result.status === "unassigned"
+      ? `  no assignment; current ${identityLabel(result.current)}.\n`
+      : `  expected ${expectedIdentityLabel(result.expected)}; current ${identityLabel(result.current)}; ${routeStatusLabel(result.status)}.\n`,
+  );
+  if (result.status === "unknown" || result.status === "mismatch") {
+    process.stdout.write(
+      "  alert: current runtime does not match expected assignment. Tell the user; do not switch automatically.\n",
+    );
   }
 }
 
@@ -180,11 +195,6 @@ export function routeCommand(root, args = {}) {
     process.stdout.write(`${formatJson(result)}\n`);
   } else {
     printRoute(result);
-    if (result.status === "mismatch" || result.status === "unknown") {
-      process.stdout.write(
-        "  action:   Tell the user which agent/model is expected; do not switch automatically.\n",
-      );
-    }
   }
   if (config.models.mismatch === "block" && result.status === "mismatch") return 1;
   return 0;

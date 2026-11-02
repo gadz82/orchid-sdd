@@ -24,14 +24,15 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test tests/setup.test.mjs tests/memory.test.mjs tests/lifecycle.test.mjs tests/workspace.test.mjs tests/migration.test.mjs tests/plugin.test.mjs tests/personas.test.mjs tests/skill-install.test.mjs tests/profiles.test.mjs tests/steering.test.mjs tests/models.test.mjs tests/prompt-state.test.mjs",
+    "test": "node --test tests/setup.test.mjs tests/memory.test.mjs tests/lifecycle.test.mjs tests/workspace.test.mjs tests/migration.test.mjs tests/plugin.test.mjs tests/personas.test.mjs tests/skill-install.test.mjs tests/profiles.test.mjs tests/steering.test.mjs tests/models.test.mjs tests/prompt-state.test.mjs tests/output-style.test.mjs",
     "plugin:check": "node --test tests/plugin.test.mjs",
     "personas:check": "node --test tests/personas.test.mjs",
     "skill:check": "node --test tests/skill-install.test.mjs",
     "profiles:check": "node --test tests/profiles.test.mjs",
     "steering:check": "node --test tests/steering.test.mjs",
     "models:check": "node --test tests/models.test.mjs",
-    "prompt-state:check": "node --test tests/prompt-state.test.mjs"
+    "prompt-state:check": "node --test tests/prompt-state.test.mjs",
+    "output-style:check": "node --test tests/output-style.test.mjs"
   },
   "keywords": [
     "sdd",

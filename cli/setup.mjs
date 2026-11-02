@@ -530,12 +530,12 @@ export function runSetup(root, skillRoot, options = {}) {
   process.stdout.write(`  knowledge  ${config.knowledge_folder}\n`);
   process.stdout.write(`  docblocks  ${config.docblocks_folder}\n`);
   process.stdout.write(`  constitution ${config.constitution_folder}\n`);
-  process.stdout.write(`  personas   [${config.personas.enabled.join(", ")}]\n`);
-  process.stdout.write(`  steering   [${config.steering.enabled.join(", ")}]\n`);
+  process.stdout.write(`  personas   ${config.personas.enabled.length} role${config.personas.enabled.length === 1 ? "" : "s"} enabled\n`);
+  process.stdout.write(`  steering   ${config.steering.enabled.length} rule${config.steering.enabled.length === 1 ? "" : "s"} enabled\n`);
   if (config.workspace && config.workspace.enabled) {
     process.stdout.write(`  workspace  ${config.workspace.repos.length} repo(s): ${config.workspace.repos.map((repo) => repo.id).join(", ")}\n`);
   }
-  process.stdout.write(`  state      G0 passed\n`);
+  process.stdout.write("  status     setup complete\n");
   process.stdout.write(`Next: orchid-sdd start "<title>"\n`);
   return { config, state };
 }

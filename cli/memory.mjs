@@ -147,10 +147,9 @@ export function record(root, args) {
   if (args.json) {
     process.stdout.write(`${formatJson(node)}\n`);
   } else {
-    process.stdout.write(`Recorded ${id} (${type})\n`);
-    process.stdout.write(`  ${description}\n`);
+    process.stdout.write(`Recorded a ${type}: ${description}\n`);
     process.stdout.write(
-      `  ${scope === "project" ? "scope project" : `iteration ${iteration}`}\n`,
+      `  ${scope === "project" ? "Saved for the whole project" : "Saved for the current iteration"}\n`,
     );
   }
   return 0;
@@ -180,10 +179,9 @@ export function index(root, args) {
     );
     return 0;
   }
-  const label = manifest.iteration ? manifest.iteration.title : "no active iteration";
-  process.stdout.write(`Indexed ${manifest.nodes.length} node(s) for ${label}\n`);
-  process.stdout.write(`  manifest ${paths(root, config).manifest}\n`);
-  process.stdout.write(`  indexes  ${Object.keys(indexes).length} files\n`);
+  const label = manifest.iteration ? manifest.iteration.title : "the project";
+  process.stdout.write(`Memory index rebuilt: ${manifest.nodes.length} saved item(s) for ${label}\n`);
+  process.stdout.write(`  ${Object.keys(indexes).length} search index file(s) are ready\n`);
   return 0;
 }
 

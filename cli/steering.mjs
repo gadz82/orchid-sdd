@@ -5,6 +5,7 @@ import { expandDirs } from "./registry.mjs";
 import { readState } from "./store.mjs";
 import { OrchidError, exists, formatJson, readText } from "./util.mjs";
 import { parseFrontMatter } from "./yaml.mjs";
+import { phaseLabel } from "./human.mjs";
 
 const ID_RE = /^[a-z][a-z0-9._-]{0,63}$/;
 const KINDS = new Set(STEERING_KINDS);
@@ -317,10 +318,10 @@ export function steeringCommand(root, skillRoot, args = {}) {
       return 0;
     }
     const width = Math.max(4, ...rows.map((rule) => rule.id.length));
-    process.stdout.write(`${"ID".padEnd(width)}  KIND          AUTHORITY  ENABLED  SOURCE\n`);
+    process.stdout.write(`${"RULE".padEnd(width)}  TITLE / STATUS\n`);
     for (const rule of rows) {
       process.stdout.write(
-        `${rule.id.padEnd(width)}  ${rule.kind.padEnd(12)}  ${rule.authority.padEnd(9)}  ${enabled.has(rule.id) ? "yes" : "no "}      ${rule.source}\n`,
+        `${rule.id.padEnd(width)}  ${rule.title} — ${rule.authority}, ${enabled.has(rule.id) ? "enabled" : "available"}\n`,
       );
     }
     return 0;
@@ -360,23 +361,19 @@ export function steeringCommand(root, skillRoot, args = {}) {
       process.stdout.write(`${formatJson(payload)}\n`);
       return 0;
     }
-    process.stdout.write(`Steering for ${phase}\n`);
-    process.stdout.write(`  artifact: ${payload.artifact}\n`);
+    process.stdout.write(`Steering for ${phaseLabel(phase)}\n`);
+    process.stdout.write(`  evidence: ${payload.artifact}\n`);
     if (!rules.length) {
       process.stdout.write("  no steering rules configured for this phase\n");
       return 0;
     }
+    process.stdout.write(`  ${rules.length} active rule${rules.length === 1 ? "" : "s"}:\n`);
     for (const rule of rules) {
       process.stdout.write(
-        `  ${rule.id} [${rule.authority}] ${rule.kind} — ${rule.summary || rule.title}\n`,
+        `    • ${rule.title} (${rule.authority}) — ${rule.summary || "no summary"}\n`,
       );
-      process.stdout.write(`    ${rule.file}\n`);
-      for (const example of rule.examples) {
-        process.stdout.write(
-          `    example: ${example.file || path.resolve(rule.baseDir, example.path)}\n`,
-        );
-      }
     }
+    process.stdout.write("  Use `orchid-sdd steering show <RULE>` for details.\n");
     return 0;
   }
 

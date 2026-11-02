@@ -477,6 +477,25 @@ upgraded independently. Project overrides live under `.orchid/` and never edit t
 package. The OpenCode command file and Claude Code plugin are thin adapters; other hosts
 use `SKILL.md` plus the CLI.
 
+### Output style
+
+Normal output is for the user, not the log file. Keep it to the shortest useful update:
+one outcome line, at most three material details, then one next action or question. Expand
+only when asked or when a decision needs evidence.
+
+The wording is shaped for the phase: intent gives goal and success measure; discovery gives
+flow and exceptions; assessment gives recommendation and risk; planning gives prompt order;
+build gives changes and verification; review gives verdict and findings; close gives what
+shipped and what remains.
+
+Output uses plain-language phase, gate, and prompt labels, explains IDs when they appear, and
+avoids raw paths, JSON, manifests, internal routing sources, and exhaustive rule lists.
+`--json` is the machine-readable mode.
+
+For example, the agent should say “intent approval gate (G1)” and “development prompt P-003
+(token rotation)”, not bare `G1` or `P-003`. ADRs are always introduced with their decision
+title. Details remain available on demand through the inspect commands.
+
 ### The loop
 
 ```text

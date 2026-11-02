@@ -617,6 +617,30 @@ Three additional safeguards:
 
 ---
 
+### 5.2 Human-readable output
+
+Default CLI output and agent narration are for humans; `--json` is the machine contract.
+Prefer the shortest useful answer: one outcome line, at most three material details, then one
+next action or question. Expand only on request or when an irreversible decision needs
+evidence. Shape the message by phase: intent gives goal and success measure; discovery gives
+flow and exceptions; assessment gives recommendation and risk; planning gives prompt order;
+build gives changes and verification; review gives verdict and findings; close gives what
+shipped and what remains.
+
+Surface summaries, not internal state:
+
+- explain gates as “intent approval gate (G1)”;
+- name prompts as “development prompt P-003 (token rotation)”;
+- introduce ADRs by decision title, never as a bare `ADR-###`;
+- summarize active steering rules by title and authority;
+- omit raw file paths, manifests, event IDs, routing source keys, and full JSON;
+- keep next actions to one or two concrete sentences.
+
+The detail commands (`steering show`, `prompt show`, `handoff show`, `diff`) remain available
+when the user asks for technical evidence.
+
+---
+
 # Part II — Lifecycle
 
 ## 6. Setup and the eight phases

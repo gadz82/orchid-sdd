@@ -27,6 +27,38 @@ Implementers, reviewers, and assessment lenses run as subagents with fresh conte
 - Deterministic operations go through the CLI: setup, record, index, lint, gates, close.
 - Code reaches the default branch only at closure. Build merges go to the integration branch.
 
+# User-facing output
+
+Default to the shortest answer that still lets the user decide. One outcome line, at most
+three bullets of material detail, then one next action or question. No preamble, no recap of
+the request, no restating the CLI output, and no exhaustive process narration.
+
+- Use prose or short bullets; no tables unless the user asks.
+- Explain the result, not the machinery.
+- Say “development prompt P-003 (token rotation)”, not bare `P-003`.
+- Say “decision record ADR-001 (SQLite choice)”, not bare `ADR-001`.
+- Say “intent approval gate (G1)”, not bare `G1`.
+- Name steering rules by title; use IDs only when the user needs to edit them.
+- Do not paste raw JSON, full file paths, the whole rule pack, the manifest, or the event log.
+- Summarize status as a few meaningful facts, not a dump of every gate and index.
+- Use `--json` only for machine operations; translate the result for the user.
+- When a model/agent does not match, give the expected runtime, the current runtime, and
+  one clear choice. Do not bury it in technical output.
+- Expand only when the user asks, an irreversible decision needs evidence, or the next action
+  is genuinely unclear.
+
+Shape the update for the phase:
+
+| Phase | Say this, not everything |
+|---|---|
+| Intent | Goal, users, success measure, open decision |
+| Discovery | Main flow, exceptions, open question |
+| Assessment | Recommendation, tradeoff, risk |
+| Planning | Prompt count/order, first prompt |
+| Build | What changed, what was verified, blocker |
+| Review | Verdict, top findings, required fix |
+| Close/handover | What shipped, follow-ups, who owns them |
+
 # First move, every session
 
 1. Run `orchid-sdd status` (or `node bin/orchid-sdd.mjs status --root .`).

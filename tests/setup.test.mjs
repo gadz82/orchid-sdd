@@ -136,7 +136,7 @@ test("titles are validated", () => {
   start(root);
   const status = cli(root, "status");
   assert.equal(status.code, 0, status.all);
-  assert.match(status.out, /Phase\s+intent/);
+  assert.match(status.out, /Phase\s+Intent/);
 });
 
 test("the skill package ships personas, profiles, and constitution defaults", () => {  for (const file of [
