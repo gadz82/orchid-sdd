@@ -333,14 +333,20 @@ export function lint(root, args) {
     const lines = fs.readFileSync(file, "utf8").split("\n");
     lines.forEach((line, index) => {
       const trimmed = line.trim();
-      if (trimmed.includes("ORCHID-MEM")) {
+      if (/ORCHID-MEM:\s*[0-9a-f-]{36}/i.test(trimmed)) {
         const re = /ORCHID-MEM:\s*([0-9a-f-]{36})/gi;
+        const hasDescription = /ORCHID-MEM:\s*[0-9a-f-]{36}\s+[—–-]\s+\S+/i.test(trimmed);
         let match;
         while ((match = re.exec(line))) {
           const uuid = match[1].toLowerCase();
           if (!isUuid7(uuid)) errors.push(`${rel(root, file)}:${index + 1}: anchor is not a UUIDv7: ${uuid}`);
           if (!anchors.has(uuid)) anchors.set(uuid, []);
           anchors.get(uuid).push({ file, line: index + 1 });
+        }
+        if (!hasDescription) {
+          errors.push(
+            `${rel(root, file)}:${index + 1}: anchor is missing a short description (expected "ORCHID-MEM: <uuid> — <description>")`,
+          );
         }
         if (trimmed.length > 180) {
           warnings.push(`${rel(root, file)}:${index + 1}: anchor line is longer than 180 characters`);
@@ -358,8 +364,11 @@ export function lint(root, args) {
   if (exists(paths(root, config).docblocks)) {
     for (const file of walkFiles(paths(root, config).docblocks, [".md"], [])) {
       let data;
+      let body;
       try {
-        data = parseFrontMatter(fs.readFileSync(file, "utf8")).data;
+        const parsed = parseFrontMatter(fs.readFileSync(file, "utf8"));
+        data = parsed.data;
+        body = parsed.body;
       } catch (error) {
         errors.push(`${rel(root, file)}: invalid front matter: ${error.message}`);
         continue;
@@ -368,7 +377,7 @@ export function lint(root, args) {
       const uuid = String(data.memory).toLowerCase();
       if (!isUuid7(uuid)) errors.push(`${rel(root, file)}: memory is not a UUIDv7: ${uuid}`);
       if (docblocks.has(uuid)) errors.push(`${rel(root, file)}: duplicate docblock memory ${uuid}`);
-      docblocks.set(uuid, { file, data });
+      docblocks.set(uuid, { file, data, body });
     }
   }
 
@@ -399,6 +408,14 @@ export function lint(root, args) {
     const target = code.split("#")[0];
     if (!fs.existsSync(path.join(root, target))) {
       errors.push(`${rel(root, item.file)}: code target does not exist: ${target}`);
+    }
+    const history = String(item.body || "").match(/^#{1,6}\s+History\s*$/im);
+    if (!history) {
+      errors.push(`${rel(root, item.file)}: docblock is missing a History section`);
+    } else {
+      const after = String(item.body || "").slice(history.index + history[0].length);
+      const section = after.split(/^#{1,6}\s+/m)[0].trim();
+      if (!section) errors.push(`${rel(root, item.file)}: docblock History is empty`);
     }
     if (!anchors.has(uuid)) {
       errors.push(`${rel(root, item.file)}: no ORCHID-MEM anchor found for ${uuid}`);

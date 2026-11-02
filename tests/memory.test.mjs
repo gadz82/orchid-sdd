@@ -83,7 +83,7 @@ test("lint requires anchors, docblocks, and CodeUnit nodes", () => {
   const docblock = path.join(root, "docs", "knowledge", "docblocks", `${uuid}.md`);
   fs.writeFileSync(
     docblock,
-    `---\nmemory: ${uuid}\ncode: src/auth/passkey.mjs#register\ntopics: [auth, passkeys, code]\nupdated: 2026-10-28\n---\n# Behavior\nRegisters a passkey.\n`,
+    `---\nmemory: ${uuid}\ncode: src/auth/passkey.mjs#register\ntopics: [auth, passkeys, code]\nupdated: 2026-10-28\n---\n# Behavior\nRegisters a passkey.\n\n## History\n- Requirement R-001: passkey registration.\n`,
   );
 
   const before = cli(root, "lint");
@@ -116,6 +116,41 @@ test("lint enforces the 500-character comment limit", () => {
   const result = cli(root, "lint");
   assert.equal(result.code, 1, result.all);
   assert.match(result.all, /comment is 501 chars/);
+});
+
+test("lint requires an anchor description", () => {
+  const root = tmp();
+  setup(root);
+  start(root);
+  const uuid = cli(root, "new-uuid").out.trim();
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "src", "anchor.mjs"),
+    `// ORCHID-MEM: ${uuid}\nexport function register() { return true; }\n`,
+  );
+  const result = cli(root, "lint");
+  assert.equal(result.code, 1, result.all);
+  assert.match(result.all, /anchor is missing a short description/);
+});
+
+test("lint requires a docblock History section", () => {
+  const root = tmp();
+  setup(root);
+  start(root);
+  const uuid = cli(root, "new-uuid").out.trim();
+  fs.mkdirSync(path.join(root, "src"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "src", "history.mjs"),
+    `// ORCHID-MEM: ${uuid} — record history\nexport function register() { return true; }\n`,
+  );
+  fs.mkdirSync(path.join(root, "docs", "knowledge", "docblocks"), { recursive: true });
+  fs.writeFileSync(
+    path.join(root, "docs", "knowledge", "docblocks", `${uuid}.md`),
+    `---\nmemory: ${uuid}\ncode: src/history.mjs#register\n---\n# Behavior\nRecords history.\n`,
+  );
+  const result = cli(root, "lint");
+  assert.equal(result.code, 1, result.all);
+  assert.match(result.all, /docblock is missing a History section/);
 });
 
 test("index --check detects a tampered projection", () => {

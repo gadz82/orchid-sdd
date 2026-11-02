@@ -913,7 +913,7 @@ plan/                  # the prompt folder for this spec
 2. **Resolve routing** with `orchid-sdd route --phase build --prompt <prompt-id>`; if the current agent/model is unknown or mismatched, notify the user and do not switch automatically.
 3. **Isolate** each prompt in a worktree and branch (`orchid/<iteration>/<prompt-id>`), following the isolation and knowledge protocol (§11.2).
 4. **Build a context pack**, not a repository dump: the prompt, relevant spec slice, constitution sections, 1-hop memory, affected code, test commands, and known constraints.
-5. **Implement** the prompt, run the tests, update or create the docblock and anchor, and write run artifacts and any message to the outbox; the orchestrator copies both back when the prompt completes.
+5. **Implement** the prompt, run the tests, keep inline comments why-only, update or create the anchor and docblock (including `History`), and write run artifacts and any message to the outbox; the orchestrator copies both back when the prompt completes.
 6. **Verify independently:** the orchestrator runs the acceptance commands in a clean environment. The implementer's claim is not evidence.
 7. **Review adversarially** with a fresh-context reviewer, routed by changed paths and topics.
 8. **Fix loop** up to `max_fix_loops`. A prompt that exhausts the loop enters `escalated` (§11.5): arbitration, split, or revert. A prompt never merges on a promise to fix later.
@@ -1242,8 +1242,18 @@ Rules:
 
 - The anchor is metadata, not an explanation. Keep it under ~180 characters.
 - Place it above the symbol or module it describes. One anchor per code unit.
-- The 500-character limit applies to **behaviour comments**, not to the anchor line. If a behaviour comment is needed, it is short, human, and explains *why*; the full rationale belongs in the docblock.
-- Omit comments that repeat the code. Never use comments for changelogs, commented-out code, or agent noise.
+- An inline comment is optional. When present, it contains only the minimum context needed to
+  explain *why* the code exists, why the choice is safe, or which non-obvious invariant it
+  protects. It never restates *what* the code does.
+- The 500-character limit applies to **behaviour comments**, not to the anchor line. Omit a
+  comment when the code is self-evident.
+- Never use comments for changelogs, dates, authors, prompt or agent IDs, ADR lists, copied
+  history, or commented-out code. The anchor is the **only** memory/history reference in code;
+  the linked docblock's `History` section names the ADR, specification, requirement, or
+  scenario.
+- Generated code must not invent or copy a UUID. Mint one with `orchid-sdd new-uuid`, record the
+  `CodeUnit`, write the matching UUID docblock, and run `orchid-sdd lint`.
+- Tests and private one-liners do not get anchors; tests are traced by their test IDs.
 
 **Anchor policy (deterministic, lint-enforced).** "Significant" is never left to the implementer's judgement. An anchor is **required** for:
 
@@ -1295,9 +1305,14 @@ secret while preserving a fallback for users who have not enrolled.
 - `e2e/auth/passkey-login.spec.ts`
 ```
 
+`History` is mandatory for a significant `CodeUnit`. It must name at least one durable source —
+an ADR, specification, requirement, or scenario. If none exists, record the decision first;
+do not invent history or leave the section empty.
+
 **Lint rules** (`orchid-sdd lint`):
 
 - every anchor required by the anchor policy exists and resolves to a `CodeUnit` node;
+- every anchor has the required short behaviour description;
 - every `CodeUnit` has a docblock when `require_docblock_for_anchor` is true;
 - every docblock's `code` target exists and matches the code-anchor index;
 - behaviour comments are within the configured limit;
@@ -1351,7 +1366,8 @@ PRD §3.2 + Gherkin S-003 + prior iteration 2026-09-10-sso
 
 ```md
 ## orchid-sdd memory
-- Code may carry `ORCHID-MEM: <uuid>` anchors. Resolve one before changing that code's behaviour.
+- Code may carry `ORCHID-MEM: <uuid> — <short behaviour>` anchors. The anchor is the only memory/history reference in code; history lives in the UUID docblock. Resolve it before changing that code's behaviour.
+- Inline comments explain why or a non-obvious invariant only; never restate code or copy history.
 - Read `.knowledge/manifest.jsonld` and `.knowledge/index/` — plain JSON; the JSON-LD context is optional.
 - Search by topic or question first: `orchid-sdd recall <topic|question|uuid|path>`.
 - Never edit `.knowledge/**`, the manifest, or docblocks of code you do not own. Write code; propose knowledge.
@@ -1800,6 +1816,7 @@ entire token family and emits a security event.
 # Constraints
 - Do not change the login response shape.
 - Keep the rotation transparent to the client.
+- Keep inline comments why-only; history belongs in the UUID docblock.
 
 # Out of scope
 - Revoking sessions across devices (P-004).
@@ -1814,6 +1831,8 @@ Write blockers and interface changes to `plan/prompts/_bus/outbox/P-003/`.
 - In workspace mode, `repo` names the target repo and write scopes are relative to that repo's path.
 - `type` is `build`, `test`, or `spike`. A **spike** is time-boxed (`timebox: 2h`), its deliverable is a findings report under `assessment/spikes/`, and its branch (`spike/<id>`) is never merged to the integration branch.
 - Tests are part of the deliverable, not a follow-up.
+- Inline comments are why-only; significant units carry one anchor and the linked docblock
+  carries history. A prompt that changes behaviour updates both.
 - Every write path is explicitly owned, with two **derived exceptions**: a prompt implicitly and exclusively owns its outbox (`plan/prompts/_bus/outbox/<id>/`) and its run-artifact directory, and it owns the docblocks for every path in its `scope.write` (§7.6). Neither needs to be listed.
 - Reads may be broad; writes may not.
 - Every acceptance criterion is executable or directly observable.
@@ -2783,6 +2802,7 @@ One-line pointers to every machine-checkable rule, for implementers who should n
 | One fact per node; description ≤ 160 chars | §7.3 |
 | Accepted history is superseded, never edited in place | §7.3 |
 | Anchor policy is deterministic and lint-enforced | §7.6 |
+| Inline comments explain only why or an invariant; history lives behind the anchor/docblock | §7.6 |
 | Behaviour comments ≤ 500 chars; the anchor line is exempt | §7.6 |
 | Docblocks are UUID-keyed; ownership derives from code scope | §7.6, §11.1 |
 | Spikes are time-boxed; their branches never merge | §11.1 |

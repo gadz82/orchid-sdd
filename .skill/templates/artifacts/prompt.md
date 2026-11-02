@@ -24,7 +24,8 @@ estimate: S
 One reviewable outcome. State the behaviour, not the implementation.
 
 # Constraints
-Patterns, contracts, and invariants that must hold.
+Patterns, contracts, and invariants that must hold. Keep inline comments why-only; put history
+and decisions in the UUID docblock behind the `ORCHID-MEM` anchor.
 
 # Out of scope
 Work that belongs to another prompt.

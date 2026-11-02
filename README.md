@@ -103,7 +103,7 @@ The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator run
 | Filter by repo | `orchid-sdd recall auth --repo orchid` | Workspace-scoped retrieval |
 | Rebuild indexes | `orchid-sdd index` | After recording/editing artifacts |
 | Verify indexes | `orchid-sdd index --check` | CI drift check |
-| Validate anchors/docs | `orchid-sdd lint` | Anchors, docblocks, 500-char comments |
+| Validate anchors/docs | `orchid-sdd lint` | Anchors, descriptions, docblock History, 500-char comments |
 | Lint for CI | `orchid-sdd lint --check` | Fail the build on drift |
 | Mint an ID | `orchid-sdd new-uuid` | Anchor and docblock identity |
 
@@ -535,9 +535,11 @@ code anchor → `recall` → docblock → ADR/spec/plan
 Every memory node has a UUIDv7, a ≤160-char description, 3–7 topics, provenance, and optional
 relations. Nodes are either **iteration-scoped** (default) or **project-scoped**
 (`--scope project`), the latter surviving across iterations and migrations.
-Significant code carries a one-line `ORCHID-MEM: <uuid>` anchor; the full explanation lives
-in a UUID-named docblock under `docblocks_folder`. `orchid-sdd lint` checks that anchors,
-docblocks, nodes, and comment lengths agree.
+Significant code carries a one-line `ORCHID-MEM: <uuid> — <short behaviour>` anchor; the
+anchor is the only memory/history reference in code, and the full explanation and history live
+in a UUID-named docblock under `docblocks_folder`. Inline comments stay short and explain only
+why or a non-obvious invariant. `orchid-sdd lint` checks that anchors, descriptions, docblocks,
+nodes, and comment lengths agree.
 
 ### Prompts and review
 
@@ -1258,10 +1260,13 @@ validation, while the agent orchestrates subagents, prompts, and reviews.
 
 - Every memory is a node with a UUIDv7, a ≤160-char description, and 3–7 topics.
 - Record nodes with `orchid-sdd record`; never edit `.knowledge/**` by hand.
-- Significant code carries `ORCHID-MEM: <uuid>` anchors.
-- Docblocks are UUID-named Markdown files under `docblocks_folder`.
+- Significant code carries one `ORCHID-MEM: <uuid> — <short behaviour>` anchor; inline
+  comments explain only why or a non-obvious invariant, and history lives in the docblock.
+- Docblocks are UUID-named Markdown files under `docblocks_folder`; `History` names the
+  relevant ADR, specification, requirement, or scenario.
 - `orchid-sdd recall <uuid|topic|question|path>` returns a compact context pack.
-- `orchid-sdd lint` enforces anchors, docblocks, and the 500-char comment limit.
+- `orchid-sdd lint` enforces anchors, anchor descriptions, docblock `History`, and the
+  500-char comment limit.
 
 ## Layout
 

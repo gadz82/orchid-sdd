@@ -23,10 +23,19 @@ A conflict is surfaced, never silently resolved. Any deviation requires an ADR.
 
 ## Comments and memory
 
-- Behaviour comments explain *why*, never restate the code.
-- A behaviour comment is at most 500 characters; omit it when the code is self-evident.
-- Significant units carry one `ORCHID-MEM: <uuid>` anchor and one UUID-named docblock.
-- The anchor is metadata, not an explanation. History belongs in the docblock and manifest.
+- An inline comment is optional; when present, it contains only the minimum context needed to
+  explain *why* the code exists, why the choice is safe, or which non-obvious invariant it
+  protects. It never restates *what* the code does.
+- Keep behaviour comments at or below 500 characters; omit them when the code is self-evident.
+- Never use comments as changelogs, author/date stamps, prompt logs, ADR lists, or copied
+  history. Those belong in the docblock and manifest.
+- Significant units carry exactly one `ORCHID-MEM: <uuidv7> — <short behaviour description>`
+  anchor and one UUID-named docblock. The anchor is the only memory/history reference in code.
+- The docblock records `Behavior`, `Why`, `Invariants`, `Failure modes`, `History`, and
+  `Tests`; `History` names the ADR, specification, requirement, or scenario that explains the
+  current state.
+- Generated code never invents or copies a UUID. Mint one with `orchid-sdd new-uuid`, record the
+  `CodeUnit`, write the docblock, and run `orchid-sdd lint`.
 - Never edit `.knowledge/**` or the manifest by hand.
 
 ## Definition of done

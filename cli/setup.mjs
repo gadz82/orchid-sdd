@@ -25,7 +25,8 @@ export const GITIGNORE_END = "# orchid-sdd:end";
 export function agentsBlock(knowledgeFolder, constitutionFolder = ".orchid/constitution") {
   return `${AGENTS_BEGIN}
 ## orchid-sdd memory
-- Code may carry \`ORCHID-MEM: <uuid>\` anchors. Resolve one before changing that code's behaviour.
+- Code may carry \`ORCHID-MEM: <uuid> — <short behaviour>\` anchors. The anchor is the only memory/history reference in code; history lives in the UUID docblock. Resolve it before changing that code's behaviour.
+- Inline comments explain why or a non-obvious invariant only; never restate code or copy history.
 - Read \`${knowledgeFolder}/manifest.jsonld\` and \`${knowledgeFolder}/index/\` — plain JSON; the JSON-LD context is optional.
 - Search by topic or question first: \`orchid-sdd recall <topic|question|uuid|path>\`.
 - Never edit \`${knowledgeFolder}/**\`, the manifest, or docblocks of code you do not own. Write code; propose knowledge.

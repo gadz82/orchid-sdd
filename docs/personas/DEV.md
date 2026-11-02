@@ -51,7 +51,8 @@ pretends that a passing build equals an accepted behaviour.
 
 - Code and tests that pass in a clean environment.
 - A prompt report with commands, results, changed paths, and residual risk.
-- `ORCHID-MEM` anchors and UUID docblocks for significant units.
+- `ORCHID-MEM` anchors and UUID docblocks for significant units; inline comments explain
+  only why or a non-obvious invariant, and history lives in the docblock.
 - Memory proposals and a clear handoff to QE and CR.
 
 ## Questions this role must ask

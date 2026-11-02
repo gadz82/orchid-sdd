@@ -256,6 +256,18 @@ test("steering show exposes the rule, its examples, and example content", () => 
   assert.match(examples.out, /export interface UserRepository/);
 });
 
+test("code-style steering covers comments, anchors, and docblock history", () => {
+  const root = tmp();
+  setup(root);
+  const show = cli(root, "steering", "show", "code-style", "--json");
+  assert.equal(show.code, 0, show.all);
+  const body = JSON.parse(show.out).body;
+  assert.match(body, /# Comments and memory/);
+  assert.match(body, /ORCHID-MEM: <uuidv7> — <short behaviour description>/);
+  assert.match(body, /History/);
+  assert.match(body, /must not restate/i);
+});
+
 test("a project file can override a shipped steering rule by id", () => {
   const root = tmp();
   setup(root);

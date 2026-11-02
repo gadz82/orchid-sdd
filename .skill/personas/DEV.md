@@ -24,7 +24,8 @@ outputs:
 
 - Respect `scope.write`; never touch another prompt's paths.
 - Add tests with the change and run the exact acceptance command.
-- Update the docblock and anchor for significant behaviour changes.
+- Update the docblock and anchor for significant behaviour changes; keep inline comments
+  why-only and put history in the docblock.
 - Write blockers and interface changes to the outbox; never edit the manifest or
   `.knowledge`.
 - Keep the change small; do not perform drive-by refactors.

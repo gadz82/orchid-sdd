@@ -56,6 +56,9 @@ Claude Code packaging:
 - Made coding-agent task updates human-readable and terse: one outcome line, material details
   shaped by phase, explained IDs, and a clear next action; raw IDs, paths, JSON, and internal
   source keys stay out of user-facing narration.
+- Added an explicit generated-code comment contract: inline comments carry only the minimum
+  why/invariant, significant units carry one `ORCHID-MEM` anchor, and history lives in the
+  linked UUID docblock. `lint` now requires a non-empty anchor description.
 - Added an eight-step, plain-language setup wizard with steering and optional model-routing
   steps.
 - Added agent-friendly setup flags: `--steering-preset`, `--no-steering`,

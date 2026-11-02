@@ -207,6 +207,7 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 - Dependencies are explicit; write scopes are disjoint within a wave.
 - Every prompt cites requirements/scenarios, memory refs, constitution sections, active steering
   rule IDs, and an executable acceptance command.
+- Prompt constraints keep comments why-only and put history in the docblock.
 - Docblock ownership is derived from `scope.write`; do not list docblock files.
 - Check the cost estimate against `budgets`; surface it at G4.
 - Pass G4; prompts are frozen and hashed.
@@ -219,6 +220,8 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 - Record the prompt with `orchid-sdd prompt start <prompt-id> --step implement`; advance safe
   steps with `prompt step` and finish with `prompt complete|fail|waive`.
 - Give each implementer a context pack, not the repository.
+- Keep inline comments why-only; update the anchor and docblock for significant units, with
+  history in the docblock.
 - The orchestrator runs acceptance tests in a clean environment; the implementer's claim
   is not evidence.
 - Review with a fresh-context reviewer routed by paths/topics. Batch CR is allowed for
@@ -371,9 +374,15 @@ orchid-sdd record --type Decision --scope project --repo <repo-id> \
 - Anchor grammar: `ORCHID-MEM: <uuidv7> — <short description>` (one line).
 - Required for exported/public symbols whose behaviour changes, entry points, traced
   symbols, and any symbol with a docblock. Not for tests or private one-liners.
+- The anchor is the only memory/history reference in code. The linked UUID docblock carries
+  Behavior, Why, Invariants, Failure modes, History, and Tests; History names the relevant
+  ADR, specification, requirement, or scenario.
+- Inline comments are optional and explain only why or a non-obvious invariant. Omit comments
+  that restate the code, and never put changelogs, dates, authors, prompt IDs, ADR lists, or
+  copied history in them. Behaviour comments are ≤500 characters.
+- Generated code must not invent or copy a UUID. Mint one with `orchid-sdd new-uuid`, record
+  the `CodeUnit`, write the docblock, and run `orchid-sdd lint` before claiming a prompt done.
 - Docblocks are UUID-named: `<docblocks_folder>/<uuid>.md`, with `code:` in front matter.
-- Behaviour comments are ≤500 characters and omitted when unnecessary. The anchor line is
-  metadata, not a behaviour comment.
 - Run `orchid-sdd lint` before claiming a prompt is done.
 
 ## Bottom-up retrieval
