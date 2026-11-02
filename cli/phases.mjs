@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { loadConfig } from "./config.mjs";
+import { PHASE_NAMES, loadConfig } from "./config.mjs";
 import {
   appendEvent,
   archiveTransients,
@@ -31,6 +31,7 @@ import {
   steeringArtifact,
   validateSteeringRefs,
 } from "./steering.mjs";
+import { detectCurrentIdentity, evaluateRoute, resolveRoute } from "./models.mjs";
 
 function context(root) {
   const loaded = loadConfig(root);
@@ -50,6 +51,24 @@ function steeringFor(root, config, phase, skillRoot) {
     throw new OrchidError(`invalid steering configuration:\n - ${errors.join("\n - ")}`);
   }
   return { map, rules: activeSteering(config, map, phase) };
+}
+
+function routingFor(root, config, state, phase) {
+  const route = resolveRoute(root, config, {
+    phase,
+    iteration: state && state.activeIteration,
+  });
+  return evaluateRoute(route, detectCurrentIdentity());
+}
+
+function printRouting(routing) {
+  process.stdout.write(
+    `  routing:  ${routing.effort} (${routing.source}) → ${routing.expectedText || "unassigned"}\n`,
+  );
+  process.stdout.write(`  current:  ${routing.currentText}\n`);
+  if (routing.status === "unknown" || routing.status === "mismatch") {
+    process.stdout.write(`  [alert]  ${routing.message}\n`);
+  }
 }
 
 function validateTitle(raw, maxChars) {
@@ -248,11 +267,21 @@ export function phaseCommand(root, args, name) {
 
   state.phase = spec.target;
   const steering = steeringFor(root, config, spec.target, args.skillRoot);
+  const routing = routingFor(root, config, state, spec.target);
   writeState(root, state);
   appendEvent(root, config, state, {
     type: "phase.changed",
     subject: `phase:${spec.target}`,
-    payload: { phase: spec.target, steering: steering.rules.map((rule) => rule.id) },
+    payload: {
+      phase: spec.target,
+      steering: steering.rules.map((rule) => rule.id),
+      routing: {
+        effort: routing.effort,
+        expected: routing.expected,
+        current: routing.current,
+        status: routing.status,
+      },
+    },
   });
   writeProjection(root, config, state);
 
@@ -263,6 +292,13 @@ export function phaseCommand(root, args, name) {
         iteration: state.activeIteration,
         steering: steering.rules.map((rule) => rule.id),
         steeringArtifact: steeringArtifact(spec.target),
+        routing: {
+          effort: routing.effort,
+          expected: routing.expected,
+          current: routing.current,
+          status: routing.status,
+          message: routing.message,
+        },
       })}\n`,
     );
     return 0;
@@ -279,6 +315,7 @@ export function phaseCommand(root, args, name) {
       `  Run \`orchid-sdd steering context --phase ${spec.target}\` and cite each rule ID in the phase artifact.\n`,
     );
   }
+  printRouting(routing);
   process.stdout.write(`  ${nextAction(spec.target)}\n`);
   return 0;
 }
@@ -494,6 +531,9 @@ export function status(root, args) {
   const matrix = iteration ? matrixSummary(iteration) : null;
   const workspace = workspaceStatus(root, config);
   const steering = steeringFor(root, config, state.phase, args.skillRoot);
+  const routing = PHASE_NAMES.includes(state.phase)
+    ? routingFor(root, config, state, state.phase)
+    : null;
   const payload = {
     project: config.project.name,
     profile: config.project.profile,
@@ -508,6 +548,7 @@ export function status(root, args) {
     workspace,
     steering: steering.rules.map((rule) => rule.id),
     steeringArtifact: steering.rules.length ? steeringArtifact(state.phase) : null,
+    routing,
     next: nextAction(state.phase),
   };
   if (args.json) {
@@ -530,6 +571,7 @@ export function status(root, args) {
       `Steering ${steering.rules.map((rule) => `${rule.id}[${rule.authority}]`).join(", ")}\n`,
     );
   }
+  if (routing) printRouting(routing);
   if (workspace.length) {
     process.stdout.write(`Workspace ${workspace.length} repo(s)\n`);
     for (const repo of workspace) {

@@ -33,7 +33,9 @@ Implementers, reviewers, and assessment lenses run as subagents with fresh conte
 2. Run `orchid-sdd doctor` if config, sources, personas, or steering changed.
 3. Read `AGENTS.md`, `.orchid/constitution/constitution.md`, and the relevant manifest slice.
 4. Run `orchid-sdd steering context --phase <current-phase>` and read every active rule.
-5. Never load the whole knowledge graph; query `orchid-sdd recall <topic|question|uuid|path>`.
+5. Run `orchid-sdd route --phase <current-phase>`; if the current model/agent is unknown or
+   does not match the expected assignment, stop and tell the user. Never switch automatically.
+6. Never load the whole knowledge graph; query `orchid-sdd recall <topic|question|uuid|path>`.
 
 # Command map
 
@@ -44,6 +46,7 @@ Implementers, reviewers, and assessment lenses run as subagents with fresh conte
 | Inspect personas | `orchid-sdd persona list [--json]` / `persona show <ID>` |
 | Inspect steering | `orchid-sdd steering list [--phase P] [--json]` / `steering show <ID>` |
 | Apply phase steering | `orchid-sdd steering context --phase <phase>` |
+| Resolve model/agent | `orchid-sdd route --phase <phase> [--prompt P-003] [--current-agent NAME] [--current-model NAME]` |
 | Convert an existing project/workspace | `orchid-sdd migrate scan\|backup\|init\|status\|finalize` |
 | Validate setup/sources | `orchid-sdd doctor [--ci] [--online] [--fix]` |
 | Start an iteration | `orchid-sdd start "<title>" [--technical-only] [--rigor S\|M\|L]` |
@@ -175,6 +178,8 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 ## Phase 5 — Build and adversarial CR
 
 - Select ready prompts; create a worktree and branch `orchid/<iteration>/<prompt-id>`.
+- Run `orchid-sdd route --phase build --prompt <prompt-id>` before execution and alert the user
+  on `unknown` or `mismatch`.
 - Give each implementer a context pack, not the repository.
 - The orchestrator runs acceptance tests in a clean environment; the implementer's claim
   is not evidence.
@@ -240,6 +245,22 @@ explicit project decisions that must be checked and cited.
   ADR, not a silent waiver.
 - The CLI validates references, but the agent owns semantic compliance. `steering context`
   provides the rule pack; it does not prove the rule was followed.
+
+# Model and agent routing
+
+Routing is declarative. The CLI never loads, launches, or switches a model or coding agent.
+
+- `orchid-sdd route --phase <phase>` resolves the expected effort and assignment.
+- `orchid-sdd route --phase build --prompt P-003` applies a development-prompt override.
+- Current identity comes from `--current-agent`/`--current-model` or
+  `ORCHID_CURRENT_AGENT`/`ORCHID_CURRENT_MODEL`; host environment hints are best-effort only.
+- `unknown` means the expected identity is configured but the current one was not detected.
+- `mismatch` means the declared current identity differs from the expected one.
+- `unassigned` means the effort has no agent/model mapping yet.
+- On `unknown` or `mismatch`, stop, tell the user what is expected, and ask them to switch or
+  explicitly accept the current runtime. Never switch silently.
+- With `models.mismatch: block`, a confirmed mismatch makes `route` fail; it still does not
+  switch anything.
 
 # Memory contract
 
@@ -386,3 +407,4 @@ into `input/legacy/` only after the backup is verified; never delete the backup.
 9. In workspace mode, never create nested knowledge or run setup inside a repo.
 10. Never delete migration backups; restore from `BACKUP.json` if needed.
 11. Never pass G2 or G6 with an unresolved blocking steering rule; cite evidence or record an ADR.
+12. Never silently continue after a model/agent mismatch; notify the user and let them decide.

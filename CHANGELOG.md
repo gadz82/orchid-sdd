@@ -40,6 +40,10 @@ Claude Code packaging:
   Go, Python, PHP, Rust, Java, and Ruby.
 - Added core SOLID, dependency inversion/DI container, and SAGA steering rules.
 - Added optional DDD, CQRS, event-driven, and language-specific style presets.
+- Added declarative `models` routing: effort levels, phase and development-prompt
+  assignments, agent/model mappings, and `route` detection with unknown/mismatch alerts.
+- Added current identity detection through explicit flags/environment, with `match`,
+  `mismatch`, `unknown`, and `unassigned` states. The CLI never switches models or agents.
 - Added a seven-step, plain-language setup wizard with a steering step for core rules,
   optional presets, and Discovery/Logic Review application.
 - Added agent-friendly setup flags: `--steering-preset`, `--no-steering`,

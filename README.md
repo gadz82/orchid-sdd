@@ -132,6 +132,18 @@ The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator run
 | Phase context | `orchid-sdd steering context --phase discovery` | Give the agent the active rule pack and evidence artifact |
 | Machine-readable | `orchid-sdd steering list --json` | Automation or dashboards |
 
+### Model routing
+
+| Operation | Command | Use case |
+|---|---|---|
+| Resolve a phase | `orchid-sdd route --phase assessment` | Show the expected effort, agent, and model |
+| Resolve a prompt | `orchid-sdd route --phase build --prompt P-001` | Apply a prompt-level effort override |
+| Check the runtime | `orchid-sdd route --phase assessment --current-agent opencode --current-model openai/gpt-4.1` | Compare expected and current identity |
+| Machine-readable | `orchid-sdd route --phase assessment --json` | Automation or harness adapters |
+
+The route command never switches models or agents. It reports `match`, `mismatch`, `unknown`, or
+`unassigned`; the agent must relay a non-match to the user.
+
 ### Workspace (multi-repo)
 
 | Operation | Command | Use case |
@@ -608,6 +620,83 @@ steering:
 the artifact path where the agent records evidence. A rule may declare default `phases`, but
 the phase mapping is authoritative. Run `doctor` after editing; it rejects unknown, disabled,
 or duplicate references.
+
+### Models and efforts
+
+Model routing is declarative and separate from steering. It records which effort level a phase
+or development prompt expects, and which agent/model should provide that effort. It does not
+launch, switch, or control a model.
+
+The effort enum is:
+
+```text
+low | medium | high | extra-high | ultra
+```
+
+| Key | Default | Meaning |
+|---|---|---|
+| `models.default_effort` | `medium` | Fallback when a phase has no assignment |
+| `models.mismatch` | `warn` | `warn` always alerts; `block` fails on a confirmed mismatch |
+| `models.efforts.<effort>.agent` | `null` | Expected coding agent or harness, or `null` |
+| `models.efforts.<effort>.model` | `null` | Expected model identifier, or `null` |
+| `models.phases.<phase>` | phase defaults | Effort for `intent`, `discovery`, `assessment`, `planning`, `build`, `code_review`, `logic_review` |
+| `models.prompts.P-###` | — | Prompt effort, or a phase-to-effort map |
+
+```yaml
+models:
+  default_effort: medium
+  mismatch: warn
+  efforts:
+    low:
+      agent: null
+      model: null
+    medium:
+      agent: null
+      model: null
+    high:
+      agent: claude-code
+      model: anthropic/claude-sonnet-4
+    extra-high:
+      agent: claude-code
+      model: anthropic/claude-opus-4
+    ultra:
+      agent: claude-code
+      model: anthropic/claude-opus-4
+  phases:
+    intent: medium
+    discovery: medium
+    assessment: high
+    planning: high
+    build: high
+    code_review: high
+    logic_review: extra-high
+  prompts:
+    P-001: low
+    P-002:
+      build: high
+      code_review: extra-high
+```
+
+A development prompt may also declare `effort` in its front matter. Resolution is:
+
+```text
+models.prompts[P-###] (config)
+  → prompt front matter effort
+  → models.phases[current phase]
+  → models.default_effort
+```
+
+Set the current identity explicitly when the harness does not expose it:
+
+```bash
+export ORCHID_CURRENT_AGENT=opencode
+export ORCHID_CURRENT_MODEL=openai/gpt-4.1
+orchid-sdd route --phase assessment
+```
+
+Or pass `--current-agent` and `--current-model`. If the expected model/agent is configured but
+the current model cannot be recognized, the command prints an alert and the agent must tell the
+user. Nothing switches automatically.
 
 ### Sources
 
@@ -1139,6 +1228,7 @@ bin/orchid-sdd            alternate package-name wrapper
 cli/                      zero-dependency implementation
   config.mjs              defaults, validation, rendering, detection
   registry.mjs            profiles, personas, aliases, routing
+  models.mjs              model/effort routing and identity checks
   steering.mjs            steering resolution, validation, list/show/context
   store.mjs               state, events, projection, indexes, snapshots
   setup.mjs               setup wizard outputs
@@ -1178,8 +1268,8 @@ The suite exercises setup, doctor, config validation, the memory loop, lint, gat
 the full lifecycle, abandon, history recall, resume, workspace detection, project-scoped
 memory, clean-tree guards, migration backup/scaffold/finalize, the Claude Code plugin
 manifest, skill pointer, CLI wrapper, persona dossier consistency, steering setup/resolution,
-phase context, project rule overrides, npm skill installation, and every profile’s
-personas/tests/constitution pack in temporary projects.
+phase context, model effort resolution and mismatch alerts, project rule overrides, npm skill
+installation, and every profile’s personas/tests/constitution pack in temporary projects.
 
 ## Known limits (v0.2)
 
@@ -1198,6 +1288,8 @@ personas/tests/constitution pack in temporary projects.
 - Steering semantic compliance is agent-level. The CLI validates rule references, examples, and
   phase maps, and emits the phase pack/evidence path; it cannot prove that a reviewer followed
   a rule.
+- Model/agent identity is host-specific. The CLI resolves expected routing and compares declared
+  or environment-provided identity; it does not detect an unavailable model or switch agents.
 - MCP sources are validated but not probed (no MCP client adapter yet); `doctor --online`
   probes Git sources.
 - The Claude Code plugin ships a top-level `bin/` so Claude Code can expose the CLI;

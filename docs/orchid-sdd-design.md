@@ -309,6 +309,27 @@ steering:
     code_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern]
     logic_review: [architecture-boundaries, solid-principles, dependency-inversion-container, code-style, code-examples, repository-flow, saga-pattern, logic-review-steering]
 
+models:
+  default_effort: medium
+  mismatch: warn
+  efforts:
+    low: { agent: null, model: null }
+    medium: { agent: null, model: null }
+    high: { agent: claude-code, model: anthropic/claude-sonnet-4 }
+    extra-high: { agent: claude-code, model: anthropic/claude-opus-4 }
+    ultra: { agent: claude-code, model: anthropic/claude-opus-4 }
+  phases:
+    intent: medium
+    discovery: medium
+    assessment: high
+    planning: high
+    build: high
+    code_review: high
+    logic_review: extra-high
+  prompts:
+    P-001: low
+    P-002: { build: high, code_review: extra-high }
+
 sources:                        # v1: all sources are read-only (§10.1)
   - id: product-specs
     type: mcp
@@ -527,6 +548,7 @@ The skill exposes one explicit entry point with subcommands. Running `/orchid-sd
 | `/orchid-sdd persona list` / `persona show <ID>` | any | Inspect effective personas, sources, and overrides | — |
 | `/orchid-sdd steering list` / `steering show <ID>` | any | Inspect effective rules, phases, authority, examples, and overrides | — |
 | `/orchid-sdd steering context --phase P` | any | Emit the active rule pack and evidence artifact for a phase | — |
+| `/orchid-sdd route --phase P [--prompt P-003]` | any | Resolve expected effort, agent, and model; report match, mismatch, unknown, or unassigned | — |
 | `/orchid-sdd start "<title>"` | 1 | Validate the title, produce PRD and TRD, choose rigor; clean-tree guard across workspace repos (`--allow-dirty` to override) | G1 |
 | `/orchid-sdd discover` | 2 | PM-led requirements capture, Gherkin, consistency scan, questionnaires | G2 |
 | `/orchid-sdd assess` | 3 | Parallel technical impact analysis, negotiation, ADRs, go/no-go | G3 |
@@ -859,14 +881,15 @@ plan/                  # the prompt folder for this spec
 **Execution loop:**
 
 1. **Select ready prompts** whose dependencies are done and whose write scopes are disjoint.
-2. **Isolate** each prompt in a worktree and branch (`orchid/<iteration>/<prompt-id>`), following the isolation and knowledge protocol (§11.2).
-3. **Build a context pack**, not a repository dump: the prompt, relevant spec slice, constitution sections, 1-hop memory, affected code, test commands, and known constraints.
-4. **Implement** the prompt, run the tests, update or create the docblock and anchor, and write run artifacts and any message to the outbox; the orchestrator copies both back when the prompt completes.
-5. **Verify independently:** the orchestrator runs the acceptance commands in a clean environment. The implementer's claim is not evidence.
-6. **Review adversarially** with a fresh-context reviewer, routed by changed paths and topics.
-7. **Fix loop** up to `max_fix_loops`. A prompt that exhausts the loop enters `escalated` (§11.5): arbitration, split, or revert. A prompt never merges on a promise to fix later.
-8. **Merge into the integration branch** (`orchid/<iteration>/integration`) in wave order, through the orchestrator; the default branch is untouched during build unless an XP-mainline steering rule explicitly permits otherwise. Update the matrix and emit events. Commit and PR metadata carry the iteration and prompt IDs, the matrix slice, test evidence, and the CR verdict.
-9. **Refresh indexes at wave boundaries**, not on every file write.
+2. **Resolve routing** with `orchid-sdd route --phase build --prompt <prompt-id>`; if the current agent/model is unknown or mismatched, notify the user and do not switch automatically.
+3. **Isolate** each prompt in a worktree and branch (`orchid/<iteration>/<prompt-id>`), following the isolation and knowledge protocol (§11.2).
+4. **Build a context pack**, not a repository dump: the prompt, relevant spec slice, constitution sections, 1-hop memory, affected code, test commands, and known constraints.
+5. **Implement** the prompt, run the tests, update or create the docblock and anchor, and write run artifacts and any message to the outbox; the orchestrator copies both back when the prompt completes.
+6. **Verify independently:** the orchestrator runs the acceptance commands in a clean environment. The implementer's claim is not evidence.
+7. **Review adversarially** with a fresh-context reviewer, routed by changed paths and topics.
+8. **Fix loop** up to `max_fix_loops`. A prompt that exhausts the loop enters `escalated` (§11.5): arbitration, split, or revert. A prompt never merges on a promise to fix later.
+9. **Merge into the integration branch** (`orchid/<iteration>/integration`) in wave order, through the orchestrator; the default branch is untouched during build unless an XP-mainline steering rule explicitly permits otherwise. Update the matrix and emit events. Commit and PR metadata carry the iteration and prompt IDs, the matrix slice, test evidence, and the CR verdict.
+10. **Refresh indexes at wave boundaries**, not on every file write.
 
 **Exit:** G5 for each prompt — acceptance met, tests green, CR passed, anchors/docblocks valid, merged to the integration branch, matrix updated. The iteration can proceed to logic review only when all prompts are done or explicitly waived.
 
@@ -1592,6 +1615,41 @@ reviewers, but the PM owns the final coverage statement.
 enabled or disabled per feature. Steering makes project choices explicit, selectable, and
 citable at the two semantic gates where they most often disappear: Discovery and Logic Review.
 
+### 9.5 Model and agent routing
+
+The `models` section maps effort labels to an expected coding agent and model. It is
+configuration, not a launcher: the CLI never invokes a model, hands off execution, or stores
+provider credentials.
+
+Efforts are `low`, `medium`, `high`, `extra-high`, and `ultra`. Each phase has a default
+effort; each development prompt may override it, either in `models.prompts.P-###` or in the
+prompt front matter:
+
+```text
+models.prompts[P-###] (config)
+  → prompt front matter effort
+  → models.phases[current phase]
+  → models.default_effort
+```
+
+`orchid-sdd route --phase P [--prompt P-003]` resolves the expected effort, agent, and model.
+It reports one of:
+
+- `match` — declared current identity matches;
+- `mismatch` — declared current identity differs;
+- `unknown` — expected identity is set, but current identity was not detected;
+- `unassigned` — the effort has no agent/model mapping.
+
+Current identity is supplied by `--current-agent`/`--current-model` or
+`ORCHID_CURRENT_AGENT`/`ORCHID_CURRENT_MODEL`. The CLI may infer the harness from host hints,
+but never infers a model. If the runtime identity is unknown, the agent must tell the user what
+is expected and let the user decide whether to switch. `models.mismatch: block` can turn a
+confirmed mismatch into a non-zero route result; it still does not switch.
+
+This is the first slice of multi-harness support. Reliable mid-flow switching additionally
+requires step-level run state, prompt leases, checkpoints, and handoff artifacts; those are not
+part of this routing implementation.
+
 ---
 
 ## 10. External specs and MCP sources
@@ -1968,8 +2026,9 @@ sensible default; nothing is written until step 7 is confirmed.
    state, CI job, `AGENTS.md` contract, and steering starter; validate the generated config;
    print the first command. `doctor` remains the explicit follow-up health check.
 
-Advanced configuration such as external sources, execution tuning, and governance thresholds
-remains config/file/agent work. Migration has its own scaffold and plan (§22).
+Advanced configuration such as external sources, model routing, execution tuning, and
+governance thresholds remains config/file/agent work. Migration has its own scaffold and plan
+(§22).
 
 **Agent-friendly mode.** An agent should pass `--yes` and explicit flags instead of answering
 prompts. The flags mirror the wizard:
@@ -2156,6 +2215,7 @@ The resulting tree:
 | Comments ≤500 chars, optional, docblocks in Markdown at configured path | §7.6 |
 | Setup wizard, extensions, new personas, five profiles | §13, §14 |
 | Steering rules for architecture, examples, style, and repository flow; applied to discovery and logic review | §4.4, §9.4, §14 |
+| Multi-model routing with effort levels, phase/prompt assignments, and unknown/mismatch alerts | §4.4, §9.5, §19 |
 | Title ≤500 chars, validation, clarification | §6 Phase 1 |
 | Product and technical requirements | §6 Phase 1 |
 | PM-led discovery, Gherkin, manifest consistency, questionnaires | §6 Phase 2 |
@@ -2277,6 +2337,7 @@ No decisions remain open. Decisions that arise during implementation are recorde
 | **M4 — Closure and handover** | Audit move, freeze, release notes, handover/tour generator, external MCP sources, full eval regression suite | A full iteration closes, archives, and produces a verified tour; missing MCP blocks with a clear message |
 | **M5 — Workspace and migration** (v0.2.0) | Nested-repo detection, root-owned workspace config, per-repo `extends` overrides, project-scoped memory, Git state/clean-tree guards, `migrate scan/backup/init/status/finalize`, backup manifest and LLM reconstruction plan | A multi-repo workspace and a legacy `.knowledge` project both migrate non-destructively; workspace status/doctor pass; migration reaches `phase: ready` |
 | **M6 — Steering rules** (unreleased) | ID-resolved architecture, SOLID, dependency inversion/DI, SAGA, example, style, repository, and process rules; cross-language examples; phase maps for Discovery and Logic Review; project overrides; `steering list/show/context`; gate audit metadata | Setup seeds defaults; `doctor` validates references and examples; Discovery and Logic Review emit the rule pack and evidence artifact |
+| **M7 — Model routing** (current slice) | Effort enum, phase and prompt assignments, agent/model mappings, `route`, environment/flag identity, mismatch/unknown alerts | Route resolves phase and development-prompt effort; unknown/mismatch is explicit and never auto-switches |
 
 The order is deliberate: memory and validation first, because every later phase depends on them. Building the orchestrator before the manifest would create a system that cannot explain itself.
 

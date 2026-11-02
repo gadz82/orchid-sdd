@@ -20,6 +20,7 @@ import {
 import { migrateCommand } from "./migration.mjs";
 import { installSkill } from "./skill.mjs";
 import { steeringCommand } from "./steering.mjs";
+import { routeCommand } from "./models.mjs";
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -29,7 +30,7 @@ const VALUE_OPTIONS = new Set([
   "path", "wave", "prompt", "id", "alias", "relation", "persona",
   "persona-file", "knowledge-folder", "docblocks-folder", "constitution-folder",
   "customizations-folder", "repo", "output", "scope", "agent", "dest", "phase",
-  "steering-preset",
+  "steering-preset", "current-agent", "current-model",
 ]);
 const REPEATABLE = new Set([
   "relation",
@@ -96,6 +97,7 @@ Setup and inspection
   status                      Show phase, gates, memory, steering, and next action (--json)
   diff                        Show overrides versus skill defaults (--content)
   steering list|show|context  Inspect and apply phase steering rules
+  route                       Resolve the expected agent/model for a phase or prompt
 
 Iteration
   start "<title>"             Start an iteration (--technical-only, --rigor S|M|L)
@@ -134,6 +136,10 @@ skill options
 steering options
   --phase intent|discovery|assessment|planning|build|code_review|logic_review
   --examples  --json
+
+route options
+  --phase intent|discovery|assessment|planning|build|code_review|logic_review
+  --prompt P-001  --current-agent NAME  --current-model NAME  --json
 
 record options
   --type Requirement|Scenario|Decision|Prompt|CodeUnit|...
@@ -345,6 +351,14 @@ export async function main(argv) {
           id: positional[1],
           phase: args.phase,
           examples: flag(args.examples),
+          json,
+        });
+      case "route":
+        return routeCommand(root, {
+          phase: args.phase,
+          prompt: args.prompt,
+          currentAgent: args["current-agent"],
+          currentModel: args["current-model"],
           json,
         });
       default:

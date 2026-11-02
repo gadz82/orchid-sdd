@@ -30,6 +30,7 @@ export function agentsBlock(knowledgeFolder, constitutionFolder = ".orchid/const
 - Never edit \`${knowledgeFolder}/**\`, the manifest, or docblocks of code you do not own. Write code; propose knowledge.
 - Follow \`${constitutionFolder}/\` for how code is written here.
 - Read \`orchid-sdd steering context --phase <phase>\` before Discovery and Logic Review; apply every active rule and cite its ID.
+- Run \`orchid-sdd route --phase <phase>\` before work; if the current model/agent is unknown or mismatched, tell the user. Never switch automatically.
 ${AGENTS_END}
 `;
 }

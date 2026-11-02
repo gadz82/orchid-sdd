@@ -26,6 +26,7 @@
     "memory_refs": { "type": "array", "items": { "type": "string" } },
     "constitution_refs": { "type": "array", "items": { "type": "string" } },
     "estimate": { "enum": ["S", "M", "L"] },
+    "effort": { "enum": ["low", "medium", "high", "extra-high", "ultra"] },
     "timebox": { "type": "string" }
   }
 }

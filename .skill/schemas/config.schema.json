@@ -53,6 +53,42 @@
     "docblocks": { "type": "object" },
     "personas": { "type": "object" },
     "constitution": { "type": "object" },
+    "models": {
+      "type": "object",
+      "required": ["default_effort", "mismatch", "efforts", "phases", "prompts"],
+      "additionalProperties": false,
+      "properties": {
+        "default_effort": { "enum": ["low", "medium", "high", "extra-high", "ultra"] },
+        "mismatch": { "enum": ["warn", "block"] },
+        "efforts": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "low": { "$ref": "#/$defs/effortMapping" },
+            "medium": { "$ref": "#/$defs/effortMapping" },
+            "high": { "$ref": "#/$defs/effortMapping" },
+            "extra-high": { "$ref": "#/$defs/effortMapping" },
+            "ultra": { "$ref": "#/$defs/effortMapping" }
+          }
+        },
+        "phases": {
+          "type": "object",
+          "additionalProperties": { "enum": ["low", "medium", "high", "extra-high", "ultra"] }
+        },
+        "prompts": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              { "enum": ["low", "medium", "high", "extra-high", "ultra"] },
+              {
+                "type": "object",
+                "additionalProperties": { "enum": ["low", "medium", "high", "extra-high", "ultra"] }
+              }
+            ]
+          }
+        }
+      }
+    },
     "steering": {
       "type": "object",
       "required": ["enabled", "search_paths", "phases"],
@@ -85,5 +121,15 @@
     "budgets": { "type": "object" },
     "governance": { "type": "object" },
     "telemetry": { "type": "object" }
+  },
+  "$defs": {
+    "effortMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "agent": { "type": ["string", "null"] },
+        "model": { "type": ["string", "null"] }
+      }
+    }
   }
 }

@@ -33,6 +33,12 @@ export const STEERING_KINDS = [
   "custom",
 ];
 
+export const EFFORTS = ["low", "medium", "high", "extra-high", "ultra"];
+
+const DEFAULT_EFFORTS = Object.fromEntries(
+  EFFORTS.map((effort) => [effort, { agent: null, model: null }]),
+);
+
 export const DEFAULT_CONFIG = {
   version: 1,
   project: { name: "project", profile: "custom", default_branch: "main" },
@@ -137,6 +143,21 @@ export const DEFAULT_CONFIG = {
         "logic-review-steering",
       ],
     },
+  },
+  models: {
+    default_effort: "medium",
+    mismatch: "warn",
+    efforts: DEFAULT_EFFORTS,
+    phases: {
+      intent: "medium",
+      discovery: "medium",
+      assessment: "high",
+      planning: "high",
+      build: "high",
+      code_review: "high",
+      logic_review: "extra-high",
+    },
+    prompts: {},
   },
   sources: [],
   phases: {
@@ -253,6 +274,17 @@ export const CONFIG_SCHEMA = S.map({
       }),
     ),
     phases: S.mapOf(S.list(S.str)),
+  }),
+  models: S.map({
+    default_effort: S.enum(...EFFORTS),
+    mismatch: S.enum("warn", "block"),
+    efforts: S.map(
+      Object.fromEntries(
+        EFFORTS.map((effort) => [effort, S.map({ agent: S.any, model: S.any })]),
+      ),
+    ),
+    phases: S.mapOf(S.enum(...EFFORTS)),
+    prompts: S.mapOf(S.any),
   }),
   sources: S.list(S.any),
   phases: S.mapOf(S.map({ personas: S.list(S.str) })),
@@ -392,7 +424,50 @@ export function validateConfig(raw) {
   validateSources(raw.sources, errors);
   validateWorkspace(raw.workspace, errors);
   validateSteering(raw.steering, errors);
+  validateModels(raw.models, errors);
   return errors;
+}
+
+function validateModels(models, errors) {
+  if (!models || typeof models !== "object" || Array.isArray(models)) return;
+  for (const effort of EFFORTS) {
+    const mapping = (models.efforts && models.efforts[effort]) || {};
+    for (const field of ["agent", "model"]) {
+      const value = mapping[field];
+      if (value !== null && value !== undefined && typeof value !== "string") {
+        errors.push(`models.efforts.${effort}.${field} must be a string or null`);
+      }
+    }
+  }
+  for (const phase of Object.keys(models.phases || {})) {
+    if (!PHASE_NAMES.includes(phase)) {
+      errors.push(`models.phases.${phase} is not a recognized phase`);
+    }
+  }
+  for (const [id, value] of Object.entries(models.prompts || {})) {
+    if (!/^P-[0-9]{3}$/.test(id)) {
+      errors.push(`models.prompts.${id} must be a prompt id like P-001`);
+      continue;
+    }
+    if (typeof value === "string") {
+      if (!EFFORTS.includes(value)) {
+        errors.push(`models.prompts.${id} must be one of: ${EFFORTS.join(", ")}`);
+      }
+      continue;
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+      errors.push(`models.prompts.${id} must be an effort or a phase-to-effort map`);
+      continue;
+    }
+    for (const [phase, effort] of Object.entries(value)) {
+      if (!PHASE_NAMES.includes(phase)) {
+        errors.push(`models.prompts.${id}.${phase} is not a recognized phase`);
+      }
+      if (!EFFORTS.includes(effort)) {
+        errors.push(`models.prompts.${id}.${phase} must be one of: ${EFFORTS.join(", ")}`);
+      }
+    }
+  }
 }
 
 function validatePaths(raw, errors) {
@@ -527,6 +602,25 @@ function yamlString(value) {
   return JSON.stringify(String(value));
 }
 
+function renderModelsBlock(models = DEFAULT_CONFIG.models) {
+  let out = "models:\n";
+  out += `  default_effort: ${models.default_effort}\n`;
+  out += `  mismatch: ${models.mismatch}\n`;
+  out += "  efforts:\n";
+  for (const effort of EFFORTS) {
+    const mapping = models.efforts[effort] || {};
+    out += `    ${effort}:\n`;
+    out += `      agent: ${mapping.agent === null || mapping.agent === undefined ? "null" : yamlString(mapping.agent)}\n`;
+    out += `      model: ${mapping.model === null || mapping.model === undefined ? "null" : yamlString(mapping.model)}\n`;
+  }
+  out += "  phases:\n";
+  for (const phase of PHASE_NAMES) {
+    out += `    ${phase}: ${models.phases[phase] || models.default_effort}\n`;
+  }
+  out += "  prompts: {}\n";
+  return out;
+}
+
 function renderSteeringBlock(steering = DEFAULT_CONFIG.steering) {
   let out = "steering:\n";
   out += `  enabled: [${steering.enabled.join(", ")}]\n`;
@@ -636,6 +730,7 @@ constitution:
   lock: true
 
 ${renderSteeringBlock(steering)}
+${renderModelsBlock()}
 sources: []
 
 phases:
