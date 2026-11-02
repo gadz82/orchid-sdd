@@ -38,6 +38,12 @@ test("migrate init backs up legacy assets and scaffolds a workspace", () => {
   assert.ok(fs.existsSync(path.join(root, "MIGRATION.md")));
   assert.ok(fs.existsSync(path.join(root, ".orchid/migration/PLAN.md")));
   assert.ok(fs.existsSync(path.join(root, ".orchid/migration/prompts/01-inventory.md")));
+  const codePrompt = fs.readFileSync(
+    path.join(root, ".orchid/migration/prompts/03-code.md"),
+    "utf8",
+  );
+  assert.match(codePrompt, /ORCHID-MEM: <uuid> — <short behaviour>/);
+  assert.match(codePrompt, /History/);
 
   const status = cli(root, "migrate", "status", "--json");
   assert.equal(status.code, 0, status.all);

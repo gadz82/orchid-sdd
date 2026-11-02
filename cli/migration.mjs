@@ -441,7 +441,8 @@ For each repo:
 1. Read \`git log --reverse --format='%h %cs %s'\` and \`git log --follow -- <path>\`.
 2. Read tags and release notes to identify stable behaviour.
 3. Identify significant code units (public APIs, entry points, contracts, migrations).
-4. Add \`ORCHID-MEM: <uuid>\` anchors and UUID-named docblocks.
+4. Add \`ORCHID-MEM: <uuid> — <short behaviour>\` anchors and UUID-named docblocks with a
+   \`History\` section.
 5. Record \`CodeUnit\` nodes with \`--repo\`, \`--code path#symbol\`, and the docblock artifact.
 
 Do not anchor trivia. Use the anchor policy: public behaviour, entry points, traced
@@ -469,7 +470,7 @@ orchid-sdd migrate finalize
 ## Acceptance criteria
 
 - Every ADR/spec with current relevance has a memory node pointing to its artifact.
-- Every repo's significant code units have anchors + docblocks.
+- Every repo's significant code units have anchors, docblocks, and \`History\` references.
 - \`index --check\`, \`lint\`, and \`doctor\` are clean (or documented waivers).
 - The backup exists and \`BACKUP.json\` lists every pre-migration asset.
 - No legacy asset was deleted before the backup was verified.
@@ -497,11 +498,12 @@ Acceptance: each current ADR/spec has at least one linked node; \`orchid-sdd ind
     "03-code.md": `# Migration prompt 03 — Reconstruct code memory
 
 For each repository, inspect current code plus \`git log\`, \`git log --follow\`, tags, and
-release notes. Add \`ORCHID-MEM: <uuid>\` anchors and UUID-named docblocks for significant
-units, then record \`CodeUnit\` nodes with \`--repo\`, \`--code\`, and the docblock artifact.
-Do not anchor trivia. Run \`orchid-sdd lint\` and fix every error.
+release notes. Add \`ORCHID-MEM: <uuid> — <short behaviour>\` anchors and UUID-named docblocks
+with a \`History\` section for significant units, then record \`CodeUnit\` nodes with \`--repo\`,
+\`--code\`, and the docblock artifact. Keep inline comments why-only; do not copy history into
+them. Do not anchor trivia. Run \`orchid-sdd lint\` and fix every error.
 
-Acceptance: anchors resolve, docblocks exist, and code units are traceable.`,
+Acceptance: anchors resolve, docblock History exists, and code units are traceable.`,
     "04-finalize.md": `# Migration prompt 04 — Validate and finalize
 
 Run \`orchid-sdd index\`, \`orchid-sdd lint\`, \`orchid-sdd doctor\`, then
