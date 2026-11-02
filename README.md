@@ -9,7 +9,7 @@ where significant code points back to the reasoning that produced it.
 - **Design:** [`docs/orchid-sdd-design.md`](docs/orchid-sdd-design.md) (v0.5)
 - **Agent contract:** [`SKILL.md`](SKILL.md)
 - **Persona dossiers:** [`docs/personas/`](docs/personas/)
-- **npm package:** `orchid-sdd` (installs the `orchid-sdd` command)
+- **npm package:** `orchid-sdd` (metadata ready; not yet published)
 - **Claude Code plugin:** [`.claude-plugin/plugin.json`](.claude-plugin/plugin.json)
 - **OpenCode adapter:** [`commands/orchid-sdd.md`](commands/orchid-sdd.md)
 - **Status:** M0 foundation + workspace/migration + Claude Code plugin (v0.2.0)
@@ -25,14 +25,16 @@ or `/orchid-sdd:run <command>` when installed as a Claude Code plugin.
 Add `--root DIR` to target another project; inspection commands accept `--json`.
 The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator runbook.
 
-**Deeper reference:** [Agent adapters](#agent-adapters) · [How it works](#how-it-works) ·
-[Configuration](#configuration-reference) · [Customization](#customization) ·
-[Workspace](#workspace-mode-multi-repo) · [Migration](#migration)
+**Deeper reference:** [Installation](#installation) · [Agent adapters](#agent-adapters) ·
+[How it works](#how-it-works) · [Configuration](#configuration-reference) ·
+[Customization](#customization) · [Workspace](#workspace-mode-multi-repo) ·
+[Migration](#migration)
 
 ### Choose your path
 
 | If you are… | Start with |
 |---|---|
+| Installing for the first time | [Git clone](#git-clone), then run `setup` |
 | Setting up a single repository | `orchid-sdd setup` |
 | Setting up a multi-repo workspace | `orchid-sdd setup --workspace --profile monorepo` |
 | Converting an existing project with `.knowledge`/ADRs | `orchid-sdd migrate scan`, then `migrate init` |
@@ -57,8 +59,8 @@ The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator run
 | Preview writes | `orchid-sdd setup --dry-run` | See every file before writing |
 | Reconfigure | `orchid-sdd setup --force ...` | Overwrite config and reset state; back up first |
 | Claude Code plugin (local) | `claude --plugin-dir .` | Load this repository as a plugin; invoke `/orchid-sdd:run` |
-| Claude Code plugin (marketplace) | `claude plugin marketplace add <repo>` then `claude plugin install orchid-sdd@orchid-sdd` | Install a published copy |
-| Install agent skill | `npx orchid-sdd skill install --agent opencode` | Copy a self-contained skill + CLI into the agent directory |
+| Claude Code plugin (marketplace) | `claude plugin marketplace add gadz82/orchid-sdd` then `claude plugin install orchid-sdd@orchid-sdd` | Install a published copy |
+| Install agent skill | `orchid-sdd skill install --agent opencode` | Copy a self-contained skill + CLI into the agent directory |
 | Validate Claude plugin | `claude plugin validate .` | Check manifest and components |
 | Preflight | `orchid-sdd doctor` | Validate config, paths, personas, steering, sources |
 | Offline CI check | `orchid-sdd doctor --ci` | CI without network or credentials |
@@ -253,21 +255,174 @@ orchid-sdd migrate status
 ## Requirements
 
 - Node.js **20+**
+- Git and a POSIX-style shell
 - No runtime dependencies
 
-The CLI is stdlib-only Node ESM. The npm package is `orchid-sdd` and installs the
-`orchid-sdd` binary. It can also run from `bin/orchid-sdd.mjs`.
+## Installation
+
+Choose the path that matches your host. The CLI is stdlib-only Node ESM and works from a
+checkout without installation.
+
+### Git clone
+
+Recommended until the npm package is published:
+
+```bash
+git clone https://github.com/gadz82/orchid-sdd.git
+# or: git clone git@github.com:gadz82/orchid-sdd.git
+cd orchid-sdd
+node bin/orchid-sdd.mjs --version
+```
+
+Run it against any project:
+
+```bash
+node /path/to/orchid-sdd/bin/orchid-sdd.mjs \
+  --root /path/to/project \
+  setup --yes --profile backend
+```
+
+To expose the command globally from the checkout:
+
+```bash
+cd /path/to/orchid-sdd
+npm link
+orchid-sdd --version
+```
+
+For agent use, install the self-contained skill into the target project:
+
+```bash
+node /path/to/orchid-sdd/bin/orchid-sdd.mjs \
+  --root /path/to/project \
+  skill install --agent opencode
+```
+
+### npm install (not yet published)
+
+The package metadata names `orchid-sdd@0.2.0`, but it has **not been published to npm**.
+The registry commands below will not work until it is released:
 
 ```bash
 npm install -g orchid-sdd
 orchid-sdd --version
-```
 
-For a one-off run:
-
-```bash
+# Or per project
+npm install --save-dev orchid-sdd
 npx orchid-sdd --version
 ```
+
+To test the npm path from a checkout before release, build and install a local tarball:
+
+```bash
+cd /path/to/orchid-sdd
+npm pack
+npm install -g ./orchid-sdd-0.2.0.tgz
+orchid-sdd --version
+```
+
+Do not rely on `npx orchid-sdd` in CI before the package is published.
+
+### Claude Code
+
+From a checkout, load the repository as a plugin:
+
+```bash
+cd /path/to/orchid-sdd
+claude plugin validate .
+claude --plugin-dir .
+```
+
+Invoke:
+
+```text
+/orchid-sdd:run status
+/orchid-sdd:run start "Add passkey login"
+```
+
+Or install the project-scoped skill without loading the plugin:
+
+```bash
+node /path/to/orchid-sdd/bin/orchid-sdd.mjs \
+  --root /path/to/project \
+  skill install --agent claude-code
+```
+
+That writes `.claude/skills/orchid-sdd` and is invoked as `/orchid-sdd <command>`. Add
+`--global` for a user-wide install. The plugin uses `/orchid-sdd:run`; the project skill uses
+`/orchid-sdd`.
+
+Marketplace installation is available only after the plugin is published:
+
+```bash
+claude plugin marketplace add gadz82/orchid-sdd
+claude plugin install orchid-sdd@orchid-sdd
+```
+
+The plugin is Claude Code-only because it ships a top-level `bin/`; claude.ai Chat and Cowork
+currently reject that layout. Use the portable skill + CLI for those hosts.
+
+### OpenCode, generic agents, and everything else
+
+Install the project-scoped OpenCode skill and command:
+
+```bash
+node /path/to/orchid-sdd/bin/orchid-sdd.mjs \
+  --root /path/to/project \
+  skill install --agent opencode
+```
+
+Destinations:
+
+| Agent | Project skill | Global skill | Invocation |
+|---|---|---|---|
+| OpenCode | `.opencode/skills/orchid-sdd` | `~/.config/opencode/skills/orchid-sdd` | `/orchid-sdd <command>` |
+| Claude Code | `.claude/skills/orchid-sdd` | `~/.claude/skills/orchid-sdd` | `/orchid-sdd <command>` |
+| Generic Agent Skills | `.agents/skills/orchid-sdd` | `~/.agents/skills/orchid-sdd` | Load explicitly |
+
+For the generic Agent Skills layout:
+
+```bash
+node /path/to/orchid-sdd/bin/orchid-sdd.mjs \
+  --root /path/to/project \
+  skill install --agent generic
+```
+
+Use `--global` for a user-wide install, `--dest DIR` for a custom directory, `--dry-run` to
+preview, and `--force` only after reviewing an existing installation. There is no
+`postinstall` side effect.
+
+For the Vercel Agent Skills catalog:
+
+```bash
+npx skills add gadz82/orchid-sdd --skill orchid-sdd -a opencode
+```
+
+For any other coding agent, CI job, or custom host:
+
+- clone the repository and call `node bin/orchid-sdd.mjs`;
+- point the agent at [`SKILL.md`](SKILL.md) and the CLI path;
+- or install the skill with `--agent generic` and keep the CLI under the installed skill.
+
+The installed skill includes its own CLI, but it does not add that directory to `PATH`. For
+hosts that do not expose the skill base path, run
+`node <skill-dir>/bin/orchid-sdd.mjs` or install the package globally after release.
+
+Installation never auto-triggers the skill. Invocation remains explicit: `/orchid-sdd`,
+`/orchid-sdd:run`, or a direct CLI call. Hosts that cannot enforce explicit invocation should
+be configured to require it.
+
+### Verify
+
+In the target project:
+
+```bash
+orchid-sdd --version
+orchid-sdd doctor
+```
+
+If you use a checkout without `npm link`, replace `orchid-sdd` with
+`node /path/to/orchid-sdd/bin/orchid-sdd.mjs`.
 
 ## Quick start
 
@@ -358,39 +513,16 @@ orchid-sdd has one contract and one deterministic CLI. Harness support is packag
 |---|---|---|
 | **OpenCode** | Root `SKILL.md` + `commands/orchid-sdd.md` | `/orchid-sdd <command>` |
 | **Claude Code plugin** | `.claude-plugin/plugin.json`, `claude-skills/orchid-sdd/SKILL.md`, `claude-commands/run.md` | `/orchid-sdd:run <command>` |
-| **Vercel Agent Skills** | Root `SKILL.md` + `skills.sh.json`; local Node/Git required | `npx skills add <owner>/<repo> --skill orchid-sdd` |
+| **Vercel Agent Skills** | Root `SKILL.md` + `skills.sh.json`; local Node/Git required | `npx skills add gadz82/orchid-sdd --skill orchid-sdd` |
 | **Any other agent / CI** | `SKILL.md` + the `orchid-sdd` CLI | Explicit CLI call |
 
-### Install the skill from npm
+### Skill installation details
 
-The npm package is `orchid-sdd`. It can place the portable skill and its local CLI into an
-agent's skill directory explicitly; there is no `postinstall` side effect:
-
-```bash
-# Project-scoped OpenCode skill + /orchid-sdd command
-npx orchid-sdd skill install --agent opencode
-
-# Project-scoped Claude Code skill; invoke /orchid-sdd
-npx orchid-sdd skill install --agent claude-code
-
-# Global installations
-npx orchid-sdd skill install --agent opencode --global
-npx orchid-sdd skill install --agent claude-code --global
-
-# Generic Agent Skills layout (.agents/skills)
-npx orchid-sdd skill install --agent generic
-```
-
-Options: `--global` for a user-wide install, `--dest DIR` for a custom skill directory,
-`--force` to replace an existing install, `--dry-run` to preview, and `--json` for
-machine-readable output. Each install copies `SKILL.md`, the CLI, `.skill` defaults, and
-`docs/personas` into a self-contained skill directory.
-
-| Agent | Project destination | Global destination |
-|---|---|---|
-| OpenCode | `.opencode/skills/orchid-sdd` | `~/.config/opencode/skills/orchid-sdd` |
-| Claude Code | `.claude/skills/orchid-sdd` | `~/.claude/skills/orchid-sdd` |
-| Generic | `.agents/skills/orchid-sdd` | `~/.agents/skills/orchid-sdd` |
+`skill install` is available from a checkout or after the npm release; see
+[Installation](#installation) for commands. Each install copies `SKILL.md`, the CLI,
+`.skill` defaults, and `docs/personas` into a self-contained skill directory. Options are
+`--global` for a user-wide install, `--dest DIR` for a custom directory, `--force` to replace
+an existing install, `--dry-run` to preview, and `--json` for machine-readable output.
 
 The OpenCode install also writes `.opencode/commands/orchid-sdd.md` (global:
 `~/.config/opencode/commands/orchid-sdd.md`); the Claude Code install relies on the
@@ -398,9 +530,8 @@ project/personal skill command and does not overwrite `.claude/commands`. `--des
 the skill only; it does not write an agent command file.
 
 The copied skill includes its own CLI under `bin/`, but it does not add that directory to
-`PATH`. For agents that do not expose the skill base path, either install the package
-globally (`npm install -g orchid-sdd`) or invoke
-`node <skill-dir>/bin/orchid-sdd.mjs`.
+`PATH`. For agents that do not expose the skill base path, invoke
+`node <skill-dir>/bin/orchid-sdd.mjs` or install the package globally after release.
 
 ### Claude Code plugin
 
@@ -427,7 +558,7 @@ For marketplace distribution, the repository includes
 `.claude-plugin/marketplace.json`. After publishing:
 
 ```bash
-claude plugin marketplace add <owner>/<repo>
+claude plugin marketplace add gadz82/orchid-sdd
 claude plugin install orchid-sdd@orchid-sdd
 ```
 
@@ -453,7 +584,7 @@ OpenCode continues to use the root `SKILL.md` and `commands/orchid-sdd.md`; noth
 The repository is discoverable by the Vercel `skills` CLI from the root `SKILL.md`:
 
 ```bash
-npx skills add <owner>/<repo> --skill orchid-sdd -a opencode
+npx skills add gadz82/orchid-sdd --skill orchid-sdd -a opencode
 ```
 
 `skills.sh.json` is the repository-page configuration that groups the root skill for the
