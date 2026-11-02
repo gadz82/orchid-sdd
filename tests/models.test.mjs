@@ -17,8 +17,8 @@ function editConfig(root, replacements) {
 function assignHigh(root, agent = "claude-code", model = "anthropic/claude-sonnet-4") {
   editConfig(root, [
     [
-      `    high:\n      agent: null\n      model: null`,
-      `    high:\n      agent: ${JSON.stringify(agent)}\n      model: ${JSON.stringify(model)}`,
+      "  efforts: {}",
+      `  efforts:\n    high:\n      agent: ${JSON.stringify(agent)}\n      model: ${JSON.stringify(model)}`,
     ],
   ]);
 }
@@ -130,7 +130,7 @@ test("invalid model effort configuration fails doctor", () => {
   setup(root);
   editConfig(root, [
     ["assessment: high", "assessment: extreme"],
-    ["    high:\n      agent: null\n      model: null", "    high:\n      agent: 42\n      model: null"],
+    ["  efforts: {}", "  efforts:\n    high:\n      agent: 42\n      model: null"],
   ]);
   const doctor = cli(root, "doctor");
   assert.equal(doctor.code, 1, doctor.all);

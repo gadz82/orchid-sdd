@@ -135,7 +135,10 @@ function printRoute(result) {
   process.stdout.write(`  expected: ${result.expectedText || "unassigned"}\n`);
   process.stdout.write(`  current:  ${result.currentText}\n`);
   process.stdout.write(`  status:   ${result.status}\n`);
-  if (result.message) process.stdout.write(`  [alert]   ${result.message}\n`);
+  if (result.message) {
+    const label = result.status === "unassigned" ? "[info]" : "[alert]";
+    process.stdout.write(`  ${label.padEnd(10)}${result.message}\n`);
+  }
 }
 
 export function routeCommand(root, args = {}) {

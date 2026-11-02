@@ -61,7 +61,10 @@ function printRoute(routing) {
     `  routing:  ${routing.effort} (${routing.source}) → ${routing.expectedText || "unassigned"}\n`,
   );
   process.stdout.write(`  current:  ${routing.currentText}\n`);
-  if (routing.message) process.stdout.write(`  [alert]  ${routing.message}\n`);
+  if (routing.message) {
+    const label = routing.status === "unassigned" ? "[info]" : "[alert]";
+    process.stdout.write(`  ${label.padEnd(9)}${routing.message}\n`);
+  }
 }
 
 function promptState(state, id) {

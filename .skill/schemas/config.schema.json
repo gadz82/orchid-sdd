@@ -55,7 +55,6 @@
     "constitution": { "type": "object" },
     "models": {
       "type": "object",
-      "required": ["default_effort", "mismatch", "efforts", "phases", "prompts"],
       "additionalProperties": false,
       "properties": {
         "default_effort": { "enum": ["low", "medium", "high", "extra-high", "ultra"] },

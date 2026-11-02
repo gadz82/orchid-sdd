@@ -35,10 +35,6 @@ export const STEERING_KINDS = [
 
 export const EFFORTS = ["low", "medium", "high", "extra-high", "ultra"];
 
-const DEFAULT_EFFORTS = Object.fromEntries(
-  EFFORTS.map((effort) => [effort, { agent: null, model: null }]),
-);
-
 export const DEFAULT_CONFIG = {
   version: 1,
   project: { name: "project", profile: "custom", default_branch: "main" },
@@ -147,7 +143,7 @@ export const DEFAULT_CONFIG = {
   models: {
     default_effort: "medium",
     mismatch: "warn",
-    efforts: DEFAULT_EFFORTS,
+    efforts: {},
     phases: {
       intent: "medium",
       discovery: "medium",
@@ -606,12 +602,16 @@ function renderModelsBlock(models = DEFAULT_CONFIG.models) {
   let out = "models:\n";
   out += `  default_effort: ${models.default_effort}\n`;
   out += `  mismatch: ${models.mismatch}\n`;
-  out += "  efforts:\n";
-  for (const effort of EFFORTS) {
-    const mapping = models.efforts[effort] || {};
-    out += `    ${effort}:\n`;
-    out += `      agent: ${mapping.agent === null || mapping.agent === undefined ? "null" : yamlString(mapping.agent)}\n`;
-    out += `      model: ${mapping.model === null || mapping.model === undefined ? "null" : yamlString(mapping.model)}\n`;
+  const efforts = Object.entries(models.efforts || {});
+  if (!efforts.length) {
+    out += "  efforts: {}\n";
+  } else {
+    out += "  efforts:\n";
+    for (const [effort, mapping] of efforts) {
+      out += `    ${effort}:\n`;
+      out += `      agent: ${mapping.agent === null || mapping.agent === undefined ? "null" : yamlString(mapping.agent)}\n`;
+      out += `      model: ${mapping.model === null || mapping.model === undefined ? "null" : yamlString(mapping.model)}\n`;
+    }
   }
   out += "  phases:\n";
   for (const phase of PHASE_NAMES) {

@@ -312,12 +312,11 @@ steering:
 models:
   default_effort: medium
   mismatch: warn
+  # Define only the efforts this project actually uses.
   efforts:
-    low: { agent: null, model: null }
-    medium: { agent: null, model: null }
+    medium: { agent: opencode, model: openai/gpt-4.1 }
     high: { agent: claude-code, model: anthropic/claude-sonnet-4 }
     extra-high: { agent: claude-code, model: anthropic/claude-opus-4 }
-    ultra: { agent: claude-code, model: anthropic/claude-opus-4 }
   phases:
     intent: medium
     discovery: medium
@@ -327,7 +326,7 @@ models:
     code_review: high
     logic_review: extra-high
   prompts:
-    P-001: low
+    P-001: high
     P-002: { build: high, code_review: extra-high }
 
 sources:                        # v1: all sources are read-only (§10.1)
@@ -1629,9 +1628,10 @@ The `models` section maps effort labels to an expected coding agent and model. I
 configuration, not a launcher: the CLI never invokes a model, hands off execution, or stores
 provider credentials.
 
-Efforts are `low`, `medium`, `high`, `extra-high`, and `ultra`. Each phase has a default
-effort; each development prompt may override it, either in `models.prompts.P-###` or in the
-prompt front matter:
+Efforts are `low`, `medium`, `high`, `extra-high`, and `ultra`. Effort definitions are
+optional: a project defines only the efforts it uses. Each phase has a default effort; each
+development prompt may override it, either in `models.prompts.P-###` or in the prompt front
+matter:
 
 ```text
 models.prompts[P-###] (config)

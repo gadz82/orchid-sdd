@@ -654,8 +654,8 @@ low | medium | high | extra-high | ultra
 |---|---|---|
 | `models.default_effort` | `medium` | Fallback when a phase has no assignment |
 | `models.mismatch` | `warn` | `warn` always alerts; `block` fails on a confirmed mismatch |
-| `models.efforts.<effort>.agent` | `null` | Expected coding agent or harness, or `null` |
-| `models.efforts.<effort>.model` | `null` | Expected model identifier, or `null` |
+| `models.efforts.<effort>.agent` | unassigned | Expected coding agent or harness; optional |
+| `models.efforts.<effort>.model` | unassigned | Expected model identifier; optional |
 | `models.phases.<phase>` | phase defaults | Effort for `intent`, `discovery`, `assessment`, `planning`, `build`, `code_review`, `logic_review` |
 | `models.prompts.P-###` | — | Prompt effort, or a phase-to-effort map |
 
@@ -663,20 +663,15 @@ low | medium | high | extra-high | ultra
 models:
   default_effort: medium
   mismatch: warn
+  # Define only the efforts this project actually uses.
   efforts:
-    low:
-      agent: null
-      model: null
     medium:
-      agent: null
-      model: null
+      agent: opencode
+      model: openai/gpt-4.1
     high:
       agent: claude-code
       model: anthropic/claude-sonnet-4
     extra-high:
-      agent: claude-code
-      model: anthropic/claude-opus-4
-    ultra:
       agent: claude-code
       model: anthropic/claude-opus-4
   phases:
@@ -688,13 +683,15 @@ models:
     code_review: high
     logic_review: extra-high
   prompts:
-    P-001: low
+    P-001: high
     P-002:
       build: high
       code_review: extra-high
 ```
 
-A development prompt may also declare `effort` in its front matter. Resolution is:
+Effort definitions are optional: an effort with no `efforts` entry resolves as `unassigned`
+rather than forcing every project to define all five. A development prompt may also declare
+`effort` in its front matter. Resolution is:
 
 ```text
 models.prompts[P-###] (config)
