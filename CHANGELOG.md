@@ -53,9 +53,9 @@ Claude Code packaging:
   automatic model or agent replacement.
 - Added automatic latest-handoff acceptance to `resume`, with `--handoff` and `--no-handoff`
   controls.
-- Made default iteration output human-readable and terse: gates, phases, prompts, ADRs, and
-  routing are explained by title; output is shaped for the phase; raw IDs, paths, JSON, and
-  internal source keys are reserved for `--json` and detail commands.
+- Made coding-agent task updates human-readable and terse: one outcome line, material details
+  shaped by phase, explained IDs, and a clear next action; raw IDs, paths, JSON, and internal
+  source keys stay out of user-facing narration.
 - Added an eight-step, plain-language setup wizard with steering and optional model-routing
   steps.
 - Added agent-friendly setup flags: `--steering-preset`, `--no-steering`,

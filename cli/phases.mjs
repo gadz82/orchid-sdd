@@ -33,13 +33,6 @@ import {
 } from "./steering.mjs";
 import { detectCurrentIdentity, evaluateRoute, resolveRoute } from "./models.mjs";
 import { acceptHandoff, findHandoff } from "./handoff.mjs";
-import {
-  GATE_STATUS,
-  gateLabel,
-  phaseLabel,
-  promptLabel,
-  routeSummary,
-} from "./human.mjs";
 
 function context(root) {
   const loaded = loadConfig(root);
@@ -71,11 +64,12 @@ function routingFor(root, config, state, phase, prompt = null) {
 }
 
 function printRouting(routing) {
-  process.stdout.write(`  model: ${routeSummary(routing)}\n`);
+  process.stdout.write(
+    `  routing:  ${routing.effort} (${routing.source}) → ${routing.expectedText || "unassigned"}\n`,
+  );
+  process.stdout.write(`  current:  ${routing.currentText}\n`);
   if (routing.status === "unknown" || routing.status === "mismatch") {
-    process.stdout.write(
-      "  alert: runtime differs from the plan. Tell the user; do not switch automatically.\n",
-    );
+    process.stdout.write(`  [alert]  ${routing.message}\n`);
   }
 }
 
@@ -97,17 +91,17 @@ function validateTitle(raw, maxChars) {
 
 function nextAction(phase) {
   const actions = {
-    intent: "Write the product and technical intent, then ask for intent approval (G1).",
-    discovery: "Capture requirements, scenarios, and steering evidence, then ask for discovery sign-off (G2).",
-    assessment: "Assess technical impact and decisions, then ask for assessment approval (G3).",
-    planning: "Break the work into development prompts and dependencies, then ask for plan approval (G4).",
-    build: "Execute the ready development prompts, then verify each prompt (G5).",
-    logic_review: "Verify business behavior and steering evidence, then ask for logic-review approval (G6).",
-    closed: "Review and accept the handover.",
+    intent: "Write intent/prd.md and intent/trd.md, then `orchid-sdd gate pass G1 --evidence intent/prd.md`.",
+    discovery: "Apply steering, capture discovery/Gherkin/questionnaires, write discovery/steering.md; then `orchid-sdd gate pass G2 --evidence discovery/gherkin`.",
+    assessment: "Run the impact lenses and negotiation; then `orchid-sdd gate pass G3 --evidence assessment/negotiation.md`.",
+    planning: "Generate the prompt DAG and cost estimate; then `orchid-sdd gate pass G4 --evidence plan/plan.json`.",
+    build: "Execute ready prompts with `orchid-sdd build --all`; then `orchid-sdd gate pass G5 --note \"all prompts reviewed\"`.",
+    logic_review: "Verify steering, write reviews/steering-review.md, then `orchid-sdd gate pass G6 --evidence reviews/steering-review.md`.",
+    closed: "Run `orchid-sdd handover`, then `orchid-sdd handover --approve`.",
     handover: "Iteration complete.",
-    abandoned: "Start a new iteration when ready.",
-    setup: "Run setup first.",
-    ready: "Start a new iteration when ready.",
+    abandoned: "Start a new iteration with `orchid-sdd start`.",
+    setup: "Run `orchid-sdd setup`.",
+    ready: "Run `orchid-sdd start \"<title>\"`.",
     complete: "Iteration complete.",
   };
   return actions[phase] || "Run `orchid-sdd status`.";
@@ -175,9 +169,9 @@ export function start(root, args) {
     process.stdout.write(`${formatJson({ id: iteration, title, rigor, phase: "intent" })}\n`);
     return 0;
   }
-  process.stdout.write(`Started: ${title}\n`);
-  process.stdout.write(`  stage: ${phaseLabel("intent")}\n`);
-  process.stdout.write(`  next:  ${nextAction("intent")}\n`);
+  process.stdout.write(`Started ${iteration}\n`);
+  process.stdout.write(`  ${title}\n`);
+  process.stdout.write(`  ${nextAction("intent")}\n`);
   return 0;
 }
 
@@ -187,10 +181,8 @@ export function gate(root, args) {
   const action = String(args.action || "status").toLowerCase();
   const steering = steeringFor(root, config, state.phase, args.skillRoot);
   if (action === "status") {
-    const rows = Object.entries(state.gates).map(
-      ([name, status]) => `  ${gateLabel(name)}: ${GATE_STATUS[status] || status}`,
-    );
-    process.stdout.write(`Gates for ${state.iterationTitle || state.activeIteration}\n${rows.join("\n")}\n`);
+    const rows = Object.entries(state.gates).map(([name, status]) => `  ${name}  ${status}`);
+    process.stdout.write(`Gates for ${state.activeIteration}\n${rows.join("\n")}\n`);
     return 0;
   }
   const name = String(args.gate || "").toUpperCase();
@@ -222,10 +214,7 @@ export function gate(root, args) {
     },
   });
   writeProjection(root, config, state);
-  process.stdout.write(
-    `${gateLabel(name)} ${GATE_STATUS[state.gates[name]]}.\n`,
-  );
-  if (evidence) process.stdout.write(`  evidence: ${evidence}\n`);
+  process.stdout.write(`Gate ${name} ${state.gates[name]}\n`);
   return 0;
 }
 
@@ -316,18 +305,20 @@ export function phaseCommand(root, args, name) {
     );
     return 0;
   }
-  process.stdout.write(`Stage: ${phaseLabel(spec.target)}\n`);
+  process.stdout.write(`Phase: ${spec.target}\n`);
   if (steering.rules.length) {
-    const blocking = steering.rules.filter((rule) => rule.authority === "blocking").length;
     process.stdout.write(
-      `  steering: ${steering.rules.length} active${blocking ? ` (${blocking} blocking)` : ""}; evidence in ${steeringArtifact(spec.target)}.\n`,
+      `Steering ${spec.target} (${steering.rules.length}): ${steering.rules
+        .map((rule) => `${rule.id}[${rule.authority}]`)
+        .join(", ")}\n`,
     );
+    process.stdout.write(`  artifact: ${steeringArtifact(spec.target)}\n`);
     process.stdout.write(
-      `  rules: read them with \`orchid-sdd steering context --phase ${spec.target}\`.\n`,
+      `  Run \`orchid-sdd steering context --phase ${spec.target}\` and cite each rule ID in the phase artifact.\n`,
     );
   }
   printRouting(routing);
-  process.stdout.write(`  next: ${nextAction(spec.target)}\n`);
+  process.stdout.write(`  ${nextAction(spec.target)}\n`);
   return 0;
 }
 
@@ -375,7 +366,7 @@ export function close(root, args) {
     process.stdout.write(`${formatJson({ closed: id, archived: moved })}\n`);
     return 0;
   }
-  process.stdout.write(`Closed: ${state.iterationTitle || id}\n`);
+  process.stdout.write(`Closed ${id}\n`);
   process.stdout.write(`  archived: ${moved.length ? moved.join(", ") : "nothing"}\n`);
   process.stdout.write(`  ${nextAction("closed")}\n`);
   return 0;
@@ -404,7 +395,7 @@ export function abandon(root, args) {
     process.stdout.write(`${formatJson({ abandoned: id, reason, archived: moved })}\n`);
     return 0;
   }
-  process.stdout.write(`Abandoned: ${state.iterationTitle || id}\n  reason: ${reason}\n`);
+  process.stdout.write(`Abandoned ${id}\n  reason: ${reason}\n`);
   process.stdout.write(`  archived: ${moved.length ? moved.join(", ") : "nothing"}\n`);
   return 0;
 }
@@ -437,7 +428,7 @@ export function handover(root, args) {
     state.activeIteration = null;
     state.lastIteration = id;
     writeState(root, state);
-    process.stdout.write(`Handover for ${state.iterationTitle || id} is ready for review.\n`);
+    process.stdout.write(`Handover for ${id} is ready for review.\n`);
     process.stdout.write("  Review handover/HANDOVER.md and handover/tour.md, then rerun with --approve.\n");
     return 0;
   }
@@ -459,7 +450,7 @@ export function handover(root, args) {
     process.stdout.write(`${formatJson({ handover: id, status: "complete" })}\n`);
     return 0;
   }
-  process.stdout.write(`Handover accepted for ${state.iterationTitle || id}; iteration complete.\n`);
+  process.stdout.write(`Handover accepted for ${id}; iteration complete.\n`);
   return 0;
 }
 
@@ -587,17 +578,24 @@ export function resume(root, args) {
     );
     return 0;
   }
-  process.stdout.write(`Resumed at ${phaseLabel(phase)}${active ? "" : " (no active iteration)"}\n`);
-  if (active) process.stdout.write(`  iteration: ${state.iterationTitle || active}\n`);
-  if (acceptedHandoff) process.stdout.write("  checkpoint: latest handoff accepted\n");
+  process.stdout.write(`Resumed at ${phase}${active ? ` (${active})` : ""}\n`);
+  if (acceptedHandoff) process.stdout.write(`  handoff ${acceptedHandoff.data.id}\n`);
   if (state.currentPrompt) {
     const prompt = state.prompts[state.currentPrompt];
     process.stdout.write(
-      `  active: ${promptLabel(root, config, state, state.currentPrompt)}, step ${prompt.step || "not started"}\n`,
+      `  prompt ${state.currentPrompt} (${prompt.status}) step=${prompt.step || "—"} attempt=${prompt.attempt || 1}\n`,
     );
   }
-  if (routing) printRouting(routing);
-  process.stdout.write("  next: continue from the saved stage and prompt state.\n");
+  process.stdout.write(`  last event ${state.lastEvent || "none"}\n`);
+  if (routing) {
+    process.stdout.write(
+      `  routing ${routing.effort} (${routing.source}) → ${routing.expectedText || "unassigned"}\n`,
+    );
+    process.stdout.write(`  current ${routing.currentText} (${routing.status})\n`);
+    if (routing.message && ["unknown", "mismatch"].includes(routing.status)) {
+      process.stdout.write(`  [alert] ${routing.message}\n`);
+    }
+  }
   return 0;
 }
 
@@ -657,30 +655,25 @@ export function status(root, args) {
     return 0;
   }
   process.stdout.write(`Project  ${config.project.name} (${config.project.profile})\n`);
-  process.stdout.write(`Phase    ${phaseLabel(state.phase)}\n`);
+  process.stdout.write(`Phase    ${state.phase}\n`);
+  process.stdout.write(`Active   ${state.activeIteration || "—"}\n`);
   if (state.iterationTitle) process.stdout.write(`Title    ${state.iterationTitle}\n`);
-  const gateEntries = Object.entries(state.gates);
-  const approved = gateEntries.filter(([, value]) => value === "passed").length;
-  const nextGate = gateEntries.find(([, value]) => value === "pending");
-  process.stdout.write(
-    `Approvals ${approved} of ${gateEntries.length}; next ${nextGate ? gateLabel(nextGate[0]) : "none"}\n`,
-  );
-  if (manifest) {
-    process.stdout.write(
-      `Memory   ${manifest.nodes.length} saved ${manifest.nodes.length === 1 ? "item" : "items"}, ${manifest.history.length} archived ${manifest.history.length === 1 ? "iteration" : "iterations"}\n`,
-    );
-  }
+  const gates = Object.entries(state.gates).map(([name, value]) => `${name}:${value}`).join(" ");
+  process.stdout.write(`Gates    ${gates}\n`);
+  if (manifest) process.stdout.write(`Memory   ${manifest.nodes.length} node(s), ${manifest.history.length} archived iteration(s)\n`);
   if (matrix) {
-    const done = (matrix.counts.done || 0) + (matrix.counts.waived || 0);
-    process.stdout.write(`Prompts  ${done}/${matrix.total} complete\n`);
+    const counts = Object.entries(matrix.counts).map(([key, value]) => `${key}=${value}`).join(" ");
+    process.stdout.write(`Prompts  ${matrix.total} (${counts})\n`);
   }
   if (currentPrompt) {
     process.stdout.write(
-      `Active   ${promptLabel(root, config, state, currentPrompt.id)}, step ${currentPrompt.step || "not started"}, attempt ${currentPrompt.attempt || 1}\n`,
+      `Prompt   ${currentPrompt.id} (${currentPrompt.status}) step=${currentPrompt.step || "—"} attempt=${currentPrompt.attempt || 1}\n`,
     );
   }
   if (steering.rules.length) {
-    process.stdout.write(`Steering ${steering.rules.length} active rule${steering.rules.length === 1 ? "" : "s"}\n`);
+    process.stdout.write(
+      `Steering ${steering.rules.map((rule) => `${rule.id}[${rule.authority}]`).join(", ")}\n`,
+    );
   }
   if (routing) printRouting(routing);
   if (workspace.length) {

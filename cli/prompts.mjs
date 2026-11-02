@@ -14,7 +14,6 @@ import {
   writeState,
 } from "./store.mjs";
 import { OrchidError, exists, formatJson, nowIso, uuid7 } from "./util.mjs";
-import { promptLabel, routeSummary } from "./human.mjs";
 
 const PROMPT_RE = /^P-[0-9]{3}$/;
 
@@ -58,11 +57,13 @@ function promptRoute(root, config, state, prompt) {
 }
 
 function printRoute(routing) {
-  process.stdout.write(`  model: ${routeSummary(routing)}\n`);
-  if (routing.status === "unknown" || routing.status === "mismatch") {
-    process.stdout.write(
-      "  alert: runtime differs from the plan. Tell the user; do not switch automatically.\n",
-    );
+  process.stdout.write(
+    `  routing:  ${routing.effort} (${routing.source}) → ${routing.expectedText || "unassigned"}\n`,
+  );
+  process.stdout.write(`  current:  ${routing.currentText}\n`);
+  if (routing.message) {
+    const label = routing.status === "unassigned" ? "[info]" : "[alert]";
+    process.stdout.write(`  ${label.padEnd(9)}${routing.message}\n`);
   }
 }
 
@@ -98,7 +99,7 @@ export function promptCommand(root, args = {}) {
     }
     for (const prompt of rows) {
       process.stdout.write(
-        `${promptLabel(root, config, state, prompt.id)} — ${prompt.status}, step ${prompt.step || "not started"}, attempt ${prompt.attempt || 1}\n`,
+        `${prompt.id}  ${prompt.status.padEnd(18)}  step=${prompt.step || "—"}  attempt=${prompt.attempt || 1}  run=${prompt.runId || "—"}\n`,
       );
     }
     return 0;
@@ -111,10 +112,10 @@ export function promptCommand(root, args = {}) {
       process.stdout.write(`${formatJson({ ...prompt, routing: state.runs[prompt.runId]?.routing || null })}\n`);
       return 0;
     }
-    process.stdout.write(`${promptLabel(root, config, state, prompt.id)}\n`);
-    process.stdout.write(`  status:   ${prompt.status}\n`);
-    process.stdout.write(`  step:     ${prompt.step || "not started"}\n`);
-    process.stdout.write(`  attempt:  ${prompt.attempt || 1}\n`);
+    process.stdout.write(`${prompt.id}  ${prompt.status}\n`);
+    process.stdout.write(`  step:    ${prompt.step || "—"}\n`);
+    process.stdout.write(`  attempt: ${prompt.attempt || 1}\n`);
+    process.stdout.write(`  run:     ${prompt.runId || "—"}\n`);
     if (prompt.evidence) process.stdout.write(`  evidence: ${prompt.evidence}\n`);
     const run = state.runs[prompt.runId];
     if (run?.routing) printRoute(run.routing);
@@ -172,9 +173,9 @@ export function promptCommand(root, args = {}) {
       process.stdout.write(`${formatJson({ prompt, routing })}\n`);
       return 0;
     }
-    process.stdout.write(
-      `${promptLabel(root, config, state, id)} started · step ${step} · attempt ${attempt}\n`,
-    );
+    process.stdout.write(`Prompt ${id} running\n`);
+    process.stdout.write(`  step:    ${step}\n`);
+    process.stdout.write(`  attempt: ${attempt}\n`);
     printRoute(routing);
     return 0;
   }
@@ -206,7 +207,7 @@ export function promptCommand(root, args = {}) {
       process.stdout.write(`${formatJson(prompt)}\n`);
       return 0;
     }
-    process.stdout.write(`${promptLabel(root, config, state, id)}: step ${step}\n`);
+    process.stdout.write(`Prompt ${id} step: ${step}\n`);
     return 0;
   }
 
@@ -242,6 +243,6 @@ export function promptCommand(root, args = {}) {
     process.stdout.write(`${formatJson(prompt)}\n`);
     return 0;
   }
-  process.stdout.write(`${promptLabel(root, config, state, id)}: ${status}\n`);
+  process.stdout.write(`Prompt ${id} ${status}\n`);
   return 0;
 }

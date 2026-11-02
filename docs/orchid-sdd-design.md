@@ -617,15 +617,14 @@ Three additional safeguards:
 
 ---
 
-### 5.2 Human-readable output
+### 5.2 Agent update style
 
-Default CLI output and agent narration are for humans; `--json` is the machine contract.
-Prefer the shortest useful answer: one outcome line, at most three material details, then one
-next action or question. Expand only on request or when an irreversible decision needs
-evidence. Shape the message by phase: intent gives goal and success measure; discovery gives
-flow and exceptions; assessment gives recommendation and risk; planning gives prompt order;
-build gives changes and verification; review gives verdict and findings; close gives what
-shipped and what remains.
+Agent narration during task execution is for humans. Prefer the shortest useful answer: one
+outcome line, at most three material details, then one next action or question. Expand only on
+request or when an irreversible decision needs evidence. Shape the message by phase: intent
+gives goal and success measure; discovery gives flow and exceptions; assessment gives
+recommendation and risk; planning gives prompt order; build gives changes and verification;
+review gives verdict and findings; close gives what shipped and what remains.
 
 Surface summaries, not internal state:
 

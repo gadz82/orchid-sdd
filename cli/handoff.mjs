@@ -9,7 +9,6 @@ import {
 import { paths, readState, appendEvent, writeProjection } from "./store.mjs";
 import { captureWorkspaceState } from "./workspace.mjs";
 import { OrchidError, ensureDir, exists, formatJson, nowIso, uuid7 } from "./util.mjs";
-import { phaseLabel, promptLabel } from "./human.mjs";
 
 function requireActive(state) {
   if (!state.activeIteration) {
@@ -93,9 +92,8 @@ export function handoffCommand(root, args = {}) {
       return 0;
     }
     for (const row of rows) {
-      const prompt = row.prompt ? promptLabel(root, config, state, row.prompt) : "current stage";
       process.stdout.write(
-        `Checkpoint ${row.id}: ${prompt}; ${phaseLabel(row.phase || "unknown")}; ${row.reason || "no reason given"}\n`,
+        `${row.id}  phase=${row.phase || "—"} prompt=${row.prompt || "—"} ${row.file}\n`,
       );
     }
     return 0;
@@ -112,13 +110,11 @@ export function handoffCommand(root, args = {}) {
       process.stdout.write(`${formatJson(found.data)}\n`);
       return 0;
     }
-    process.stdout.write(`Checkpoint ${found.data.id}\n`);
-    process.stdout.write(`  stage:  ${phaseLabel(found.data.phase)}\n`);
-    process.stdout.write(
-      `  prompt: ${found.data.prompt ? promptLabel(root, config, state, found.data.prompt) : "none (between prompts)"}\n`,
-    );
-    process.stdout.write(`  reason: ${found.data.reason || "not specified"}\n`);
-    process.stdout.write(`  created: ${found.data.createdAt || "unknown"}\n`);
+    process.stdout.write(`${found.data.id}\n`);
+    process.stdout.write(`  phase:  ${found.data.phase}\n`);
+    process.stdout.write(`  prompt: ${found.data.prompt || "—"}\n`);
+    process.stdout.write(`  reason: ${found.data.reason || "—"}\n`);
+    process.stdout.write(`  file:   ${found.file}\n`);
     return 0;
   }
 
@@ -169,15 +165,10 @@ export function handoffCommand(root, args = {}) {
       process.stdout.write(`${formatJson(data)}\n`);
       return 0;
     }
-    process.stdout.write(
-      `Checkpoint saved for ${data.prompt ? promptLabel(root, config, state, data.prompt) : "the current stage"} · ${data.reason}.\n`,
-    );
-    process.stdout.write("  next: switch models/agents, then run `/orchid-sdd resume`.\n");
-    if (routing.status === "unknown" || routing.status === "mismatch") {
-      process.stdout.write(
-        "  alert: runtime differs from the plan. Tell the user; do not switch automatically.\n",
-      );
-    }
+    process.stdout.write(`Handoff prepared: ${id}\n`);
+    process.stdout.write(`  file:   ${file}\n`);
+    process.stdout.write(`  prompt: ${data.prompt || "—"}\n`);
+    if (routing.message) process.stdout.write(`  [alert] ${routing.message}\n`);
     return 0;
   }
 
@@ -195,8 +186,8 @@ export function handoffCommand(root, args = {}) {
       process.stdout.write(`${formatJson({ accepted: id })}\n`);
       return 0;
     }
-    process.stdout.write("Checkpoint accepted.\n");
-    process.stdout.write("  next: run `/orchid-sdd resume` to restore the prompt and step.\n");
+    process.stdout.write(`Handoff accepted: ${id}\n`);
+    process.stdout.write("  Next: run `orchid-sdd status` and continue from the saved prompt/step.\n");
     return 0;
   }
 
