@@ -73,6 +73,21 @@ test("route reports match, mismatch, and unknown current identities", () => {
   assert.match(unknown.message, /could not be recognized/);
 });
 
+test("an undefined effort falls back to default_effort", () => {
+  const root = tmp();
+  setup(root);
+  editConfig(root, [
+    [
+      "  efforts: {}",
+      `  efforts:\n    medium:\n      agent: opencode\n      model: openai/gpt-4.1`,
+    ],
+  ]);
+  const payload = route(root, "--phase", "assessment");
+  assert.equal(payload.requestedEffort, "high");
+  assert.equal(payload.effort, "medium");
+  assert.match(payload.source, /fallback/);
+});
+
 test("prompt routing overrides the phase effort", () => {
   const root = tmp();
   setup(root);

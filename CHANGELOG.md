@@ -42,7 +42,8 @@ Claude Code packaging:
 - Added optional DDD, CQRS, event-driven, and language-specific style presets.
 - Added declarative `models` routing: effort levels, phase and development-prompt
   assignments, agent/model mappings, and `route` detection with unknown/mismatch alerts.
-  Effort definitions are opt-in; undefined efforts resolve as `unassigned`.
+  Effort definitions are opt-in; undefined efforts fall back to `default_effort`, or
+  `unassigned` if the default has no mapping.
 - Added current identity detection through explicit flags/environment, with `match`,
   `mismatch`, `unknown`, and `unassigned` states. The CLI never switches models or agents.
 - Added prompt execution state (`prompt start|step|complete|fail|waive`), run/attempt events,

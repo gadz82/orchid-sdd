@@ -689,9 +689,10 @@ models:
       code_review: extra-high
 ```
 
-Effort definitions are optional: an effort with no `efforts` entry resolves as `unassigned`
-rather than forcing every project to define all five. A development prompt may also declare
-`effort` in its front matter. Resolution is:
+Effort definitions are optional: an effort with no `efforts` entry falls back to
+`models.default_effort`. If neither the requested effort nor the default has a usable mapping,
+the route is `unassigned`. A development prompt may also declare `effort` in its front matter.
+Resolution is:
 
 ```text
 models.prompts[P-###] (config)

@@ -62,12 +62,24 @@ export function resolveRoute(root, config, { phase, prompt = null, iteration = n
   if (!EFFORTS.includes(effort)) {
     throw new OrchidError(`unknown effort "${effort}" for ${prompt || phase}`);
   }
-  const mapping = (config.models.efforts && config.models.efforts[effort]) || {};
+  const requestedEffort = effort;
+  const requestedSource = source;
+  const efforts = config.models.efforts || {};
+  if (!efforts[effort]) {
+    const fallback = config.models.default_effort;
+    if (fallback !== effort && efforts[fallback]) {
+      effort = fallback;
+      source = `models.default_effort (fallback from ${requestedSource})`;
+    }
+  }
+  const mapping = efforts[effort] || {};
   return {
     phase,
     prompt,
     effort,
+    requestedEffort,
     source,
+    requestedSource,
     expected: {
       agent: mapping.agent || null,
       model: mapping.model || null,

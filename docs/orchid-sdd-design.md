@@ -1629,9 +1629,10 @@ configuration, not a launcher: the CLI never invokes a model, hands off executio
 provider credentials.
 
 Efforts are `low`, `medium`, `high`, `extra-high`, and `ultra`. Effort definitions are
-optional: a project defines only the efforts it uses. Each phase has a default effort; each
-development prompt may override it, either in `models.prompts.P-###` or in the prompt front
-matter:
+optional: a project defines only the efforts it uses. An undefined effort falls back to
+`models.default_effort`; if that has no usable mapping, the route is unassigned. Each phase has
+a default effort; each development prompt may override it, either in `models.prompts.P-###` or
+in the prompt front matter:
 
 ```text
 models.prompts[P-###] (config)
@@ -1646,7 +1647,8 @@ It reports one of:
 - `match` — declared current identity matches;
 - `mismatch` — declared current identity differs;
 - `unknown` — expected identity is set, but current identity was not detected;
-- `unassigned` — the effort has no agent/model mapping.
+- `unassigned` — neither the requested effort nor `models.default_effort` has a usable
+  agent/model mapping. An undefined requested effort falls back to the default effort.
 
 Current identity is supplied by `--current-agent`/`--current-model` or
 `ORCHID_CURRENT_AGENT`/`ORCHID_CURRENT_MODEL`. The CLI may infer the harness from host hints,
