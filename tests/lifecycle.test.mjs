@@ -22,7 +22,8 @@ function advanceToG6(root) {
   must(cli(root, "gate", "pass", "G4", "--evidence", "intent/title.md"));
   must(cli(root, "build"));
   must(cli(root, "gate", "pass", "G5", "--note", "all prompts reviewed"));
-  must(cli(root, "review"));
+  const review = must(cli(root, "review"));
+  assert.match(review.out, /Approve the changes and move forward\./);
   must(cli(root, "gate", "pass", "G6", "--evidence", "intent/title.md"));
 }
 
@@ -49,6 +50,7 @@ test("the full lifecycle closes and hands over", () => {
 
   const closed = cli(root, "close", "--approve");
   assert.equal(closed.code, 0, closed.all);
+  assert.match(closed.out, /Do you want to start the technical handover\?/);
   const state = readJson(path.join(root, ".orchid", "state.json"));
   assert.equal(state.activeIteration, null);
   assert.equal(state.phase, "closed");

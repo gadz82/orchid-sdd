@@ -518,7 +518,9 @@ the caller or the semantic quality of the evidence. A passing command is therefo
 proof of human approval, and a human gate must never be auto-passed. G5 is the
 agent/reviewer gate; G2 requires human confirmation only when answers changed scope. When no
 agent is running, the developer runs the same command manually. The agent-facing rules are
-in `SKILL.md`.
+in `SKILL.md`. At a human gate, the agent presents the evidence and ends with the exact
+request: **Approve the changes and move forward.** It records the gate only after an explicit
+answer.
 
 ### 4.7 Right-sizing and scope constraints
 
@@ -944,6 +946,8 @@ plan/                  # the prompt folder for this spec
 
 **Output:** `reviews/logic-review.md`, with findings by severity and a verdict, plus `reviews/steering-review.md` mapping each active rule to evidence. A blocking rule with no verdict or current evidence stops G6. Logic review must not become a second technical review; technical findings go back to CR or assessment with the right persona.
 
+The “explainable to a non-engineer” check verifies that the PM can state the behaviour in business terms. The full human tutorial — `handover/HANDOVER.md` and `handover/tour.md` — is generated and walked in Phase 8, after closure.
+
 - **Gaps or incoherences** → generate follow-up prompts in Phase 4, increment the spec version, and loop.
 - **Minor fixes** → small prompts, same loop.
 - **Loops are capped** at `reviews.logic.max_loops` (default 2): findings that survive the cap become either a **follow-up iteration** (linked `followUpTo`, planned immediately) or a **waived risk** with an ADR. G6 records which path was taken; the loop never runs unbounded.
@@ -973,7 +977,8 @@ plan/                  # the prompt folder for this spec
 - write `release-notes.md`: changes, breaking changes, migrations, rollback, version bump;
 - merge the integration branch into the default branch per `execution.release_strategy` (squash merge, release PR, or manual);
 - tag or prepare the release according to project convention;
-- mark the iteration `closed`; it becomes read-only.
+- mark the iteration `closed`; it becomes read-only;
+- ask whether the human wants to start the technical handover, and wait for the answer before Phase 8.
 
 **Rule:** archive, don't destroy. A closed iteration is immutable. Reopening it creates a new iteration linked with `followUpTo` and a new spec version. An iteration that will not ship is ended with `/orchid-sdd abandon` instead: same archival, no release, and the manifest records `abandoned` plus the reason.
 

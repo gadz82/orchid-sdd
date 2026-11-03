@@ -121,6 +121,15 @@ A gate passes only with evidence. Never pass a gate on a promise.
 
 Use `--evidence <iteration-relative path>` or `--note "why"`; both are logged.
 
+Before a human gate, end the message with this exact request:
+
+> **Approve the changes and move forward.**
+>
+> Evidence: `<iteration-relative paths>`. Reply `approve` to record the gate, or list
+> the changes required.
+
+Wait for an explicit answer. Do not run `gate pass` or advance the phase first.
+
 The orchestrator executes `gate pass|fail` after the required authorization. The CLI
 records the decision; it cannot verify human identity or semantic quality. Never treat a
 passing command as proof of human approval, and never auto-pass a human gate. G5 is the
@@ -241,11 +250,15 @@ Artifacts: `reviews/logic-review.md`, `reviews/steering-review.md`.
 - Review behaviour against PRD/TRD/Gherkin, the integration diff, and the steering rules.
 - Walk every scenario; check invariants, scope creep, dropped requirements, copy, error
   states, accessibility, and prior regressions.
+- Verify the change is explainable in business terms. The full human tutorial is Phase 8
+  (`HANDOVER.md` + `tour.md`); it is not a Phase 6 artifact.
 - For each steering rule, record `satisfied`, `not applicable`, `finding`, or `waived` with
   current evidence in `reviews/steering-review.md`; a blocking rule without evidence stops G6.
 - Findings become new prompts (spec version increments) or a waived risk with an ADR.
 - Loop capped at `reviews.logic.max_loops`; survivors become a follow-up iteration.
-- Pass G6, then `orchid-sdd close --approve`.
+- End with the human-gate request: **Approve the changes and move forward.** Include the
+  verdict and evidence. After explicit approval, pass G6 and run
+  `orchid-sdd close --approve`.
 
 ## Phase 7 — Closure
 
@@ -255,10 +268,12 @@ Artifacts: `reviews/logic-review.md`, `reviews/steering-review.md`.
   `execution.release_strategy`; tag/freeze the iteration.
 - Mark closed and rebuild the manifest. A closed iteration is immutable.
 - If it will not ship, use `orchid-sdd abandon "<reason>"` instead.
+- After closure, ask: **Do you want to start the technical handover?** Wait for the
+  answer before starting Phase 8.
 
 ## Phase 8 — Handover
 
-Generate `handover/HANDOVER.md` and `handover/tour.md`. Explain what changed, why, where
+On confirmation, generate `handover/HANDOVER.md` and `handover/tour.md`. Explain what changed, why, where
 to look, how to run/test, how to roll back, and what remains. The tour is 10–15 ordered
 stops with anchors and test commands. Verify links and commands, then
 `orchid-sdd handover --approve`.

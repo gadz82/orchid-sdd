@@ -220,6 +220,7 @@ orchid-sdd gate pass G1 --evidence intent/prd.md
 orchid-sdd discover
 # ... assess, plan, build, review ...
 orchid-sdd close --approve
+# Agent: "Do you want to start the technical handover?"
 orchid-sdd handover --approve
 ```
 
@@ -1369,7 +1370,7 @@ gates marked below. The CLI cannot verify who invoked it, so the process must no
 The agent asks before a human gate and only runs the command after an explicit answer:
 
 ```text
-Agent: "G1 evidence is ready: intent/prd.md. Do you approve?"
+Agent: "G1 evidence is ready: intent/prd.md. Approve the changes and move forward."
 Human: "Approved."
 Agent: orchid-sdd gate pass G1 --evidence intent/prd.md
 ```

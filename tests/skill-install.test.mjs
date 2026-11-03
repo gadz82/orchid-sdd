@@ -20,6 +20,8 @@ test("skill install targets OpenCode project paths", () => {
   ]) {
     assert.ok(fs.existsSync(path.join(root, file)), `missing ${file}`);
   }
+  const skill = fs.readFileSync(path.join(root, ".opencode/skills/orchid-sdd/SKILL.md"), "utf8");
+  assert.match(skill, /Approve the changes and move forward\./);
   const installed = path.join(root, ".opencode/skills/orchid-sdd/bin/orchid-sdd.mjs");
   const version = spawnSync(process.execPath, [installed, "--version"], { encoding: "utf8" });
   assert.equal(version.status, 0, version.stderr);
