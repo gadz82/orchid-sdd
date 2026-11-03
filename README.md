@@ -393,6 +393,11 @@ Use `--global` for a user-wide install, `--dest DIR` for a custom directory, `--
 preview, and `--force` only after reviewing an existing installation. There is no
 `postinstall` side effect.
 
+`setup` and `skill install` are independent: `setup` initializes the project artifacts
+(`.orchid/`, `.knowledge/`, `orchid-sdd.yml`), while `skill install` writes the agent skill
+(`.opencode/skills/orchid-sdd`). Either order works; run `setup` first if you want the skill
+usable immediately. Installing the npm package does not create `.opencode/skills`.
+
 For the Vercel Agent Skills catalog:
 
 ```bash
