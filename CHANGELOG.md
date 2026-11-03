@@ -1,3 +1,10 @@
+## [0.2.1](https://github.com/gadz82/orchid-sdd/compare/v0.2.0...v0.2.1) (2026-11-03)
+
+
+### Bug Fixes
+
+* **release:** run tests before npm publish ([fa23001](https://github.com/gadz82/orchid-sdd/commit/fa230011b2bc29ad666e383269e9b4dcda2486d0))
+
 # Changelog
 
 ## Unreleased
