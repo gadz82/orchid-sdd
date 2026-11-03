@@ -56,8 +56,9 @@ Claude Code packaging:
 - Made coding-agent task updates human-readable and terse: one outcome line, material details
   shaped by phase, explained IDs, and a clear next action; raw IDs, paths, JSON, and internal
   source keys stay out of user-facing narration.
-- Added deterministic legacy-knowledge copying to `migrate init` (`input/legacy/`) so
-  migration cannot silently skip reorganization; originals and backups remain intact.
+- Added deterministic legacy-knowledge restructuring to `migrate init`: after backup, the
+  legacy tree is moved into `input/legacy/`, leaving the active knowledge folder in the
+  orchid-sdd layout; the backup remains the rollback copy.
 - Added an explicit generated-code comment contract: inline comments carry only the minimum
   why/invariant, significant units carry one `ORCHID-MEM` anchor, and history lives in the
   linked UUID docblock. `lint` now requires a non-empty anchor description.

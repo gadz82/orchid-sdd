@@ -188,7 +188,7 @@ harness. It does not switch anything automatically.
 |---|---|---|
 | Scan | `orchid-sdd migrate scan [--json] [--output PATH]` | Read-only topology, knowledge, Git report |
 | Backup | `orchid-sdd migrate backup` | Copy legacy assets to `.orchid-migration-bck/<timestamp>/` |
-| Scaffold | `orchid-sdd migrate init [--profile P] [--single] [--dry-run]` | Backup + root config + repo overrides + legacy copy + plan |
+| Scaffold | `orchid-sdd migrate init [--profile P] [--single] [--dry-run]` | Backup + root config + repo overrides + legacy restructure + plan |
 | Preview | `orchid-sdd migrate init --dry-run` | See the backup/scaffold plan; writes nothing |
 | Status | `orchid-sdd migrate status [--json]` | Stage, backup path, repos |
 | Finalize | `orchid-sdd migrate finalize` | Validate manifest, write report, `phase: ready` |
@@ -1324,10 +1324,10 @@ orchid-sdd migrate finalize                # after the agent records memories
 `init` writes `MIGRATION.md`, `.orchid/migration/{scan.json,PLAN.md,prompts/,STATUS.json}`,
 and a backup at `.orchid-migration-bck/<timestamp>/` with `BACKUP.json` and restore notes.
 Legacy assets (`.knowledge`, `AGENTS.md`, config/state, `.serena/memories`, repo
-`AGENTS.md`/`.knowledge`) are copied, never deleted. It also copies legacy knowledge into
-`<knowledge_folder>/input/legacy/` before scaffolding, so the agent cannot skip the
-reorganization step. The backups and originals remain available for rollback. The plan
-instructs the agent to:
+`AGENTS.md`/`.knowledge`) are copied to the backup. The legacy knowledge tree is then
+restructured into `<knowledge_folder>/input/legacy/` before scaffolding, so the active
+knowledge root matches the orchid-sdd layout and the agent cannot skip reorganization. The
+backup remains the rollback copy. The plan instructs the agent to:
 
 1. inventory ADRs/specs/plans/prompts/progress;
 2. seed `Decision`/`Requirement`/`Scenario` nodes with `--scope project`;

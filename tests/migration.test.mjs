@@ -31,7 +31,9 @@ test("migrate init backs up legacy assets and scaffolds a workspace", () => {
   assert.ok(manifest.entries.some((entry) => entry.source === ".knowledge"));
   assert.ok(manifest.entries.some((entry) => entry.source === "AGENTS.md"));
   assert.ok(fs.existsSync(path.join(root, ".knowledge", "input", "legacy", "adr", "ADR-001-sqlite.md")));
-  assert.ok(fs.existsSync(path.join(root, ".knowledge", "README.md")));
+  assert.ok(fs.existsSync(path.join(root, ".knowledge", "input", "legacy", "README.md")));
+  assert.equal(fs.existsSync(path.join(root, ".knowledge", "adr")), false);
+  assert.equal(fs.existsSync(path.join(root, ".knowledge", "README.md")), false);
 
   const config = fs.readFileSync(path.join(root, "orchid-sdd.yml"), "utf8");
   assert.match(config, /workspace:/);
@@ -49,7 +51,10 @@ test("migrate init backs up legacy assets and scaffolds a workspace", () => {
 
   const status = cli(root, "migrate", "status", "--json");
   assert.equal(status.code, 0, status.all);
-  assert.equal(JSON.parse(status.out).stage, "scaffolded");
+  const migration = JSON.parse(status.out);
+  assert.equal(migration.stage, "scaffolded");
+  assert.equal(migration.legacy.target, ".knowledge/input/legacy");
+  assert.equal(migration.legacy.moved, true);
 });
 
 test("migrate init --dry-run writes nothing", () => {

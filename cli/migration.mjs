@@ -325,11 +325,16 @@ const LEGACY_SKIP = new Set([
   ".DS_Store",
 ]);
 
-function copyLegacyToInput(root, scan, backup) {
-  const source = backup
-    ? path.join(root, backup.target, "root", ".knowledge")
-    : path.join(root, ".knowledge");
-  const sourceKnowledge = exists(source) ? source : path.join(root, scan.knowledge.folder);
+function moveLegacyToInput(root, scan, backup) {
+  if (!backup) {
+    throw new OrchidError(
+      "refusing to restructure legacy knowledge without a backup; remove --skip-backup",
+    );
+  }
+  const currentKnowledge = path.join(root, ".knowledge");
+  const sourceKnowledge = exists(currentKnowledge)
+    ? currentKnowledge
+    : path.join(root, scan.knowledge.folder);
   if (!exists(sourceKnowledge)) return null;
   const target = path.join(root, scan.knowledge.folder, "input", "legacy");
   const entries = fs
@@ -340,12 +345,22 @@ function copyLegacyToInput(root, scan, backup) {
   for (const entry of entries) {
     const from = path.join(sourceKnowledge, entry.name);
     const to = path.join(target, entry.name);
-    fs.cpSync(from, to, { recursive: true, force: true, filter: copyFilter });
+    try {
+      fs.renameSync(from, to);
+    } catch {
+      fs.cpSync(from, to, { recursive: true, force: true, filter: copyFilter });
+      fs.rmSync(from, { recursive: true, force: true });
+    }
+  }
+  if (sourceKnowledge !== path.join(root, scan.knowledge.folder)) {
+    const remaining = fs.readdirSync(sourceKnowledge).filter((name) => name !== ".DS_Store");
+    if (!remaining.length) fs.rmSync(sourceKnowledge, { recursive: true, force: true });
   }
   return {
     source: rel(root, sourceKnowledge),
     target: rel(root, target),
     entries: entries.length,
+    moved: true,
   };
 }
 
@@ -423,7 +438,7 @@ ${repoList}
 
 1. Detected the repository/workspace topology.
 2. Backed up the pre-migration assets to \`${backup ? backup.target : BACKUP_ROOT}\`.
-3. Copied legacy knowledge into \`${scan.knowledge.folder}/input/legacy/\`.
+3. Moved legacy knowledge into \`${scan.knowledge.folder}/input/legacy/\`.
 4. Generated the root \`orchid-sdd.yml\` (workspace-aware).
 5. Generated per-repo \`orchid-sdd.yml\` overrides with \`extends\`.
 6. Created the root-owned \`.knowledge\` skeleton, state, manifest, and indexes.
@@ -485,11 +500,11 @@ symbols, and any symbol with a docblock.
 
 ## Stage 4 — Reorganize legacy knowledge safely
 
-The CLI copied reusable legacy material into
+The CLI moved reusable legacy material into
 \`${scan.knowledge.folder}/input/legacy/\` after creating the backup. Keep the original
-taxonomy recognizable (adr/, specs/, plans/, prompts/, progress/). Use the copied paths
-when recording artifacts; update any already-recorded artifact paths. The originals remain
-in place for traceability; never delete the backup.
+taxonomy recognizable (adr/, specs/, plans/, prompts/, progress/). Use those paths when
+recording artifacts. The legacy originals no longer remain at the knowledge root; the
+backup is the rollback copy.
 
 ## Stage 5 — Validate and finalize
 
@@ -521,7 +536,7 @@ Read \`.orchid/migration/scan.json\`, \`${scan.knowledge.folder}/input/legacy/RE
 (if present), and every ADR/spec/plan/prompt/progress file under
 \`${scan.knowledge.folder}/input/legacy/\`. Write \`.orchid/migration/INVENTORY.md\` with
 decisions, requirements, active plans, progress, gaps, and conflicts. The CLI already
-copied legacy material; do not modify or move the originals. Do not record nodes yet.
+moved legacy material; do not modify or move it again. Do not record nodes yet.
 
 Acceptance: the inventory names every source file it used and flags ambiguities.`,
     "02-memory.md": `# Migration prompt 02 — Seed memory
@@ -564,7 +579,7 @@ function migrationReadme(scan, backup, repos, status = "scaffolded") {
 **Root:** \`${scan.root}\`
 **Backup:** ${backup ? `\`${backup.target}\`` : "none (backup was skipped)"}
 **Knowledge:** \`${scan.knowledge.folder}\`
-**Legacy copy:** \`${scan.knowledge.folder}/input/legacy/\`
+**Legacy material:** \`${scan.knowledge.folder}/input/legacy/\`
 **Repositories:** ${repos.length ? repos.map((repo) => `\`${repo.id}\``).join(", ") : "single repository"}
 
 The migration is complete. See \`.orchid/migration/REPORT.md\` for counts and the backup
@@ -579,11 +594,11 @@ Next: \`orchid-sdd start "<title>"\`.
 **Root:** \`${scan.root}\`
 **Backup:** ${backup ? `\`${backup.target}\`` : "none (backup was skipped)"}
 **Knowledge:** \`${scan.knowledge.folder}\`
-**Legacy copy:** \`${scan.knowledge.folder}/input/legacy/\`
+**Legacy material:** \`${scan.knowledge.folder}/input/legacy/\`
 **Repositories:** ${repos.length ? repos.map((repo) => `\`${repo.id}\``).join(", ") : "single repository"}
 
 The CLI has scaffolded the root config, workspace overrides, knowledge skeleton, legacy
-copy, and migration plan. The semantic reconstruction is **LLM agent work**:
+move, and migration plan. The semantic reconstruction is **LLM agent work**:
 
 1. Read \`.orchid/migration/PLAN.md\` and \`.orchid/migration/scan.json\`.
 2. Execute the prompts in \`.orchid/migration/prompts/\` in order.
@@ -658,7 +673,7 @@ export function migrateInit(root, skillRoot, options = {}) {
   if (!backup) {
     process.stdout.write("  [warn] backup skipped by request\n");
   }
-  const legacy = copyLegacyToInput(root, scan, backup);
+  const legacy = moveLegacyToInput(root, scan, backup);
 
   runSetup(root, skillRoot, {
     profile: options.profile || scan.suggested.profile,
@@ -693,7 +708,7 @@ export function migrateInit(root, skillRoot, options = {}) {
   process.stdout.write(`  workspace  ${repos.length ? `${repos.length} repo(s)` : "single repo"}\n`);
   if (legacy) {
     process.stdout.write(
-      `  legacy     ${legacy.entries} entr${legacy.entries === 1 ? "y" : "ies"} → ${legacy.target}\n`,
+      `  legacy     ${legacy.entries} entr${legacy.entries === 1 ? "y" : "ies"} moved → ${legacy.target}\n`,
     );
   }
   process.stdout.write(`  plan       ${MIGRATION_DIR}/PLAN.md\n`);
@@ -750,7 +765,7 @@ export function migrateFinalize(root, skillRoot, options = {}) {
 - Nodes: ${manifest.nodes.length}
 - History pointers: ${manifest.history.length}
 - Knowledge: \`${loaded.config.knowledge_folder}\`
-- Legacy copy: \`${loaded.config.knowledge_folder}/input/legacy\`
+- Legacy material: \`${loaded.config.knowledge_folder}/input/legacy\`
 - Workspace: ${loaded.config.workspace && loaded.config.workspace.enabled ? `${loaded.config.workspace.repos.length} repo(s)` : "disabled"}
 
 ## Next
