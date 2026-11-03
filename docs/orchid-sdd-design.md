@@ -2563,7 +2563,7 @@ file history, existing ADRs/specs/plans/prompts, and code.
 |---|---|
 | `orchid-sdd migrate scan [--json] [--output PATH]` | Read-only topology, legacy knowledge, language, and Git report |
 | `orchid-sdd migrate backup` | Copy pre-migration assets to `.orchid-migration-bck/<timestamp>/` |
-| `orchid-sdd migrate init [--profile P] [--single] [--force] [--dry-run]` | Backup + root config + workspace overrides + migration plan |
+| `orchid-sdd migrate init [--profile P] [--single] [--force] [--dry-run]` | Backup + root config + workspace overrides + legacy copy + migration plan |
 | `orchid-sdd migrate status [--json]` | Show stage, backup, repos, timestamps |
 | `orchid-sdd migrate finalize` | Validate projection, write report, move to `phase: ready` |
 
@@ -2602,17 +2602,19 @@ entries back to their original paths.
 
 The CLI writes `.orchid/migration/PLAN.md` and four prompts. The agent must:
 
-1. **Inventory** — read `scan.json`, legacy `.knowledge/README`, ADRs, specs, plans,
-   prompts, progress, and docs; write `INVENTORY.md` with evidence and conflicts.
+1. **Inventory** — read `scan.json`, the copied legacy tree under `input/legacy/`, ADRs,
+   specs, plans, prompts, progress, and docs; write `INVENTORY.md` with evidence and
+   conflicts.
 2. **Seed memory** — record `Decision`, `Requirement`, and `Scenario` nodes with
    `--scope project` and, where relevant, `--repo`. Every node needs a ≤160-char
-   description, 3–7 topics, and an artifact. Use aliases (`ADR-021`, `R-001`).
+   description, 3–7 topics, and an artifact under `input/legacy/`. Use aliases
+   (`ADR-021`, `R-001`).
 3. **Reconstruct code memory** — per repo, use `git log`, `git log --follow`, tags, release
    notes, and current code to identify significant units; add `ORCHID-MEM` anchors and
    UUID-named docblocks; record `CodeUnit` nodes with `--repo` and `--code`.
-4. **Reorganize legacy knowledge safely** — after verifying the backup, move/copy reusable
-   material into `.knowledge/input/legacy/`, preserving the old taxonomy; update artifact
-   paths on nodes.
+4. **Verify legacy organization** — `migrate init` has already copied reusable material
+   into `<knowledge_folder>/input/legacy/` after the backup, preserving the old taxonomy.
+   Verify it and keep original artifacts intact for traceability.
 5. **Validate and finalize** — `index`, `lint`, `doctor`, then `migrate finalize`.
 
 No fabricated memories: ambiguous evidence becomes an `Assumption` node and a question.
@@ -2641,9 +2643,10 @@ MIGRATION.md
 ### 22.6 Legacy `.knowledge` coexistence
 
 Workspaces such as `orchid-workspace` already use `.knowledge` as a curated ADR/spec/plan
-store. Migration does **not** silently rewrite it. It backs it up, inventories it, and
-lets the agent move reusable material into `input/legacy/` with the original taxonomy
-recognizable. New nodes cite those artifacts; the manifest does not need to own every file.
+store. Migration does **not** silently rewrite it. It backs it up and copies reusable
+material into `input/legacy/` with the original taxonomy recognizable; originals remain
+available for traceability. New nodes cite the copied artifacts; the manifest does not need
+to own every file.
 
 If the project prefers a distinct store, pass `--knowledge-folder`; the legacy `.knowledge`
 is still backed up.

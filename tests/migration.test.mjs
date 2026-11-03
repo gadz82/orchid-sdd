@@ -30,6 +30,8 @@ test("migrate init backs up legacy assets and scaffolds a workspace", () => {
   const manifest = readJson(path.join(backup, "BACKUP.json"));
   assert.ok(manifest.entries.some((entry) => entry.source === ".knowledge"));
   assert.ok(manifest.entries.some((entry) => entry.source === "AGENTS.md"));
+  assert.ok(fs.existsSync(path.join(root, ".knowledge", "input", "legacy", "adr", "ADR-001-sqlite.md")));
+  assert.ok(fs.existsSync(path.join(root, ".knowledge", "README.md")));
 
   const config = fs.readFileSync(path.join(root, "orchid-sdd.yml"), "utf8");
   assert.match(config, /workspace:/);
@@ -57,6 +59,7 @@ test("migrate init --dry-run writes nothing", () => {
   assert.match(result.out, /Migration dry run/);
   assert.equal(fs.existsSync(path.join(root, "orchid-sdd.yml")), false);
   assert.equal(fs.existsSync(path.join(root, ".orchid-migration-bck")), false);
+  assert.equal(fs.existsSync(path.join(root, ".knowledge", "input", "legacy")), false);
 });
 
 test("migrate finalize accepts project-scoped memory and moves to ready", () => {
@@ -71,7 +74,7 @@ test("migrate finalize accepts project-scoped memory and moves to ready", () => 
     "--topics", "storage,sqlite,decisions",
     "--repo", "pkg-a",
     "--scope", "project",
-    "--artifact", ".knowledge/adr/ADR-001-sqlite.md",
+    "--artifact", ".knowledge/input/legacy/adr/ADR-001-sqlite.md",
   );
   assert.equal(recorded.code, 0, recorded.all);
 

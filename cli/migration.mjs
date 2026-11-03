@@ -315,6 +315,40 @@ export function backupProject(root, skillRoot, { scan = null, dryRun = false } =
   return { target: rel(root, target), manifest, entries, dryRun };
 }
 
+const LEGACY_SKIP = new Set([
+  "input",
+  "run-log",
+  "events",
+  "index",
+  "iterations",
+  "manifest.jsonld",
+  ".DS_Store",
+]);
+
+function copyLegacyToInput(root, scan, backup) {
+  const source = backup
+    ? path.join(root, backup.target, "root", ".knowledge")
+    : path.join(root, ".knowledge");
+  const sourceKnowledge = exists(source) ? source : path.join(root, scan.knowledge.folder);
+  if (!exists(sourceKnowledge)) return null;
+  const target = path.join(root, scan.knowledge.folder, "input", "legacy");
+  const entries = fs
+    .readdirSync(sourceKnowledge, { withFileTypes: true })
+    .filter((entry) => !LEGACY_SKIP.has(entry.name));
+  if (!entries.length) return null;
+  ensureDir(target);
+  for (const entry of entries) {
+    const from = path.join(sourceKnowledge, entry.name);
+    const to = path.join(target, entry.name);
+    fs.cpSync(from, to, { recursive: true, force: true, filter: copyFilter });
+  }
+  return {
+    source: rel(root, sourceKnowledge),
+    target: rel(root, target),
+    entries: entries.length,
+  };
+}
+
 export function renderScan(scan) {
   const repoLines = scan.workspace.repos.length
     ? scan.workspace.repos
@@ -389,9 +423,10 @@ ${repoList}
 
 1. Detected the repository/workspace topology.
 2. Backed up the pre-migration assets to \`${backup ? backup.target : BACKUP_ROOT}\`.
-3. Generated the root \`orchid-sdd.yml\` (workspace-aware).
-4. Generated per-repo \`orchid-sdd.yml\` overrides with \`extends\`.
-5. Created the root-owned \`.knowledge\` skeleton, state, manifest, and indexes.
+3. Copied legacy knowledge into \`${scan.knowledge.folder}/input/legacy/\`.
+4. Generated the root \`orchid-sdd.yml\` (workspace-aware).
+5. Generated per-repo \`orchid-sdd.yml\` overrides with \`extends\`.
+6. Created the root-owned \`.knowledge\` skeleton, state, manifest, and indexes.
 
 The CLI did **not** invent memories. That is the LLM migration work below.
 
@@ -428,7 +463,7 @@ nodes only if they describe work still to do.
 orchid-sdd record --type Decision --alias ADR-021 \\
   --description "Mini-agents are ..." \\
   --topics agents,architecture,decisions \\
-  --artifact .knowledge/adr/ADR-021-mini-agents.md \\
+  --artifact ${scan.knowledge.folder}/input/legacy/adr/ADR-021-mini-agents.md \\
   --scope project --repo orchid
 \`\`\`
 
@@ -450,10 +485,11 @@ symbols, and any symbol with a docblock.
 
 ## Stage 4 — Reorganize legacy knowledge safely
 
-After the backup is verified, move (or copy) reusable legacy material into
-\`${scan.knowledge.folder}/input/legacy/\` so the agent can cite it. Keep the original
-taxonomy recognizable (adr/, specs/, plans/, prompts/, progress/). Update artifacts
-on recorded nodes if paths change. Never delete the backup.
+The CLI copied reusable legacy material into
+\`${scan.knowledge.folder}/input/legacy/\` after creating the backup. Keep the original
+taxonomy recognizable (adr/, specs/, plans/, prompts/, progress/). Use the copied paths
+when recording artifacts; update any already-recorded artifact paths. The originals remain
+in place for traceability; never delete the backup.
 
 ## Stage 5 — Validate and finalize
 
@@ -481,18 +517,20 @@ function promptsMarkdown(scan) {
   return {
     "01-inventory.md": `# Migration prompt 01 — Inventory
 
-Read \`.orchid/migration/scan.json\`, \`${scan.knowledge.folder}/README.md\` (if present),
-and every ADR/spec/plan/prompt/progress file. Write \`.orchid/migration/INVENTORY.md\`
-with decisions, requirements, active plans, progress, gaps, and conflicts. Do not modify
-or move legacy files yet. Do not record nodes yet.
+Read \`.orchid/migration/scan.json\`, \`${scan.knowledge.folder}/input/legacy/README.md\`
+(if present), and every ADR/spec/plan/prompt/progress file under
+\`${scan.knowledge.folder}/input/legacy/\`. Write \`.orchid/migration/INVENTORY.md\` with
+decisions, requirements, active plans, progress, gaps, and conflicts. The CLI already
+copied legacy material; do not modify or move the originals. Do not record nodes yet.
 
 Acceptance: the inventory names every source file it used and flags ambiguities.`,
     "02-memory.md": `# Migration prompt 02 — Seed memory
 
 Using \`INVENTORY.md\`, record \`Decision\`, \`Requirement\`, and \`Scenario\` nodes with
 \`orchid-sdd record --scope project\`. Every node needs a ≤160-char description, 3–7 topics,
-an artifact, and (for repo-scoped facts) \`--repo\`. Use aliases for ADR/R/S ids. Do not
-guess: if a decision is unclear, record an \`Assumption\` and a question.
+an artifact under \`${scan.knowledge.folder}/input/legacy/\`, and (for repo-scoped facts)
+\`--repo\`. Use aliases for ADR/R/S ids. Do not guess: if a decision is unclear, record an
+\`Assumption\` and a question.
 
 Acceptance: each current ADR/spec has at least one linked node; \`orchid-sdd index\` runs.`,
     "03-code.md": `# Migration prompt 03 — Reconstruct code memory
@@ -505,6 +543,9 @@ them. Do not anchor trivia. Run \`orchid-sdd lint\` and fix every error.
 
 Acceptance: anchors resolve, docblock History exists, and code units are traceable.`,
     "04-finalize.md": `# Migration prompt 04 — Validate and finalize
+
+Verify \`${scan.knowledge.folder}/input/legacy/\` exists and that recorded artifacts point
+to it. If it is missing, stop and report; do not delete the originals or the backup.
 
 Run \`orchid-sdd index\`, \`orchid-sdd lint\`, \`orchid-sdd doctor\`, then
 \`orchid-sdd migrate finalize\`. Review \`.orchid/migration/REPORT.md\`. Fix findings
@@ -523,6 +564,7 @@ function migrationReadme(scan, backup, repos, status = "scaffolded") {
 **Root:** \`${scan.root}\`
 **Backup:** ${backup ? `\`${backup.target}\`` : "none (backup was skipped)"}
 **Knowledge:** \`${scan.knowledge.folder}\`
+**Legacy copy:** \`${scan.knowledge.folder}/input/legacy/\`
 **Repositories:** ${repos.length ? repos.map((repo) => `\`${repo.id}\``).join(", ") : "single repository"}
 
 The migration is complete. See \`.orchid/migration/REPORT.md\` for counts and the backup
@@ -537,10 +579,11 @@ Next: \`orchid-sdd start "<title>"\`.
 **Root:** \`${scan.root}\`
 **Backup:** ${backup ? `\`${backup.target}\`` : "none (backup was skipped)"}
 **Knowledge:** \`${scan.knowledge.folder}\`
+**Legacy copy:** \`${scan.knowledge.folder}/input/legacy/\`
 **Repositories:** ${repos.length ? repos.map((repo) => `\`${repo.id}\``).join(", ") : "single repository"}
 
-The CLI has scaffolded the root config, workspace overrides, knowledge skeleton, and
-migration plan. The semantic reconstruction is **LLM agent work**:
+The CLI has scaffolded the root config, workspace overrides, knowledge skeleton, legacy
+copy, and migration plan. The semantic reconstruction is **LLM agent work**:
 
 1. Read \`.orchid/migration/PLAN.md\` and \`.orchid/migration/scan.json\`.
 2. Execute the prompts in \`.orchid/migration/prompts/\` in order.
@@ -553,7 +596,7 @@ migration is accepted.
 `;
 }
 
-function writeScaffold(root, scan, backup, repos) {
+function writeScaffold(root, scan, backup, repos, legacy = null) {
   const dir = path.join(root, MIGRATION_DIR);
   ensureDir(path.join(dir, "prompts"));
   writeJson(path.join(dir, "scan.json"), scan);
@@ -568,6 +611,7 @@ function writeScaffold(root, scan, backup, repos) {
     backup: backup ? backup.target : null,
     repos: repos.map((repo) => repo.id),
     scan: `${MIGRATION_DIR}/scan.json`,
+    legacy,
   };
   writeJson(path.join(dir, "STATUS.json"), status);
   fs.writeFileSync(path.join(root, "MIGRATION.md"), migrationReadme(scan, backup, repos), "utf8");
@@ -604,6 +648,7 @@ export function migrateInit(root, skillRoot, options = {}) {
     }
     process.stdout.write(`  plan: ${MIGRATION_DIR}/PLAN.md\n`);
     process.stdout.write(`  prompts: ${MIGRATION_DIR}/prompts/\n`);
+    process.stdout.write(`  legacy: ${scan.knowledge.folder}/input/legacy/\n`);
     return 0;
   }
 
@@ -613,6 +658,7 @@ export function migrateInit(root, skillRoot, options = {}) {
   if (!backup) {
     process.stdout.write("  [warn] backup skipped by request\n");
   }
+  const legacy = copyLegacyToInput(root, scan, backup);
 
   runSetup(root, skillRoot, {
     profile: options.profile || scan.suggested.profile,
@@ -627,7 +673,7 @@ export function migrateInit(root, skillRoot, options = {}) {
     yes: true,
   });
 
-  const scaffold = writeScaffold(root, scan, backup, repos);
+  const scaffold = writeScaffold(root, scan, backup, repos, legacy);
   const state = readState(root);
   state.phase = "migration";
   state.migration = {
@@ -635,6 +681,7 @@ export function migrateInit(root, skillRoot, options = {}) {
     backup: backup ? backup.target : null,
     startedAt: nowIso(),
     repos: repos.map((repo) => repo.id),
+    legacy,
   };
   state.gates.G0 = "passed";
   writeState(root, state);
@@ -644,6 +691,11 @@ export function migrateInit(root, skillRoot, options = {}) {
   process.stdout.write(`  backup     ${backup ? backup.target : "none"}\n`);
   process.stdout.write(`  config     orchid-sdd.yml\n`);
   process.stdout.write(`  workspace  ${repos.length ? `${repos.length} repo(s)` : "single repo"}\n`);
+  if (legacy) {
+    process.stdout.write(
+      `  legacy     ${legacy.entries} entr${legacy.entries === 1 ? "y" : "ies"} → ${legacy.target}\n`,
+    );
+  }
   process.stdout.write(`  plan       ${MIGRATION_DIR}/PLAN.md\n`);
   process.stdout.write(`  prompts    ${MIGRATION_DIR}/prompts/\n`);
   process.stdout.write(`Next: execute the migration prompts, validate, then \`orchid-sdd migrate finalize\`\n`);
@@ -674,6 +726,14 @@ export function migrateFinalize(root, skillRoot, options = {}) {
   if (!state.migration && !options.force) {
     throw new OrchidError("no migration in progress; run `orchid-sdd migrate init` first");
   }
+  if (state.migration?.legacy) {
+    const legacyPath = path.join(root, loaded.config.knowledge_folder, "input", "legacy");
+    if (!exists(legacyPath)) {
+      throw new OrchidError(
+        `legacy material is missing from ${loaded.config.knowledge_folder}/input/legacy; rerun migrate init or pass --force`,
+      );
+    }
+  }
   const { manifest } = writeProjection(root, loaded.config, state);
   if (!manifest.nodes.length && !options.force) {
     throw new OrchidError(
@@ -690,6 +750,7 @@ export function migrateFinalize(root, skillRoot, options = {}) {
 - Nodes: ${manifest.nodes.length}
 - History pointers: ${manifest.history.length}
 - Knowledge: \`${loaded.config.knowledge_folder}\`
+- Legacy copy: \`${loaded.config.knowledge_folder}/input/legacy\`
 - Workspace: ${loaded.config.workspace && loaded.config.workspace.enabled ? `${loaded.config.workspace.repos.length} repo(s)` : "disabled"}
 
 ## Next
