@@ -1,6 +1,6 @@
 {
   "name": "orchid-sdd",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "A memory-backed, specification-driven development (SDD) skill for coding agents.",
   "type": "module",
   "bin": {

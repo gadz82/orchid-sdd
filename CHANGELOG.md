@@ -1,3 +1,16 @@
+# [0.3.0](https://github.com/gadz82/orchid-sdd/compare/v0.2.1...v0.3.0) (2026-11-03)
+
+
+### Bug Fixes
+
+* **release:** publish skill prompt updates ([5b631b5](https://github.com/gadz82/orchid-sdd/commit/5b631b53673444bd8bf9ebbb7e14cff0027de2ae))
+* **release:** sync CLI and plugin versions [skip ci] ([71d48bb](https://github.com/gadz82/orchid-sdd/commit/71d48bb5e97cf8f79b463db4ef80821bc60f0bc7))
+
+
+### Features
+
+* **skill:** prompt for approval and technical handover [skip ci] ([7d68609](https://github.com/gadz82/orchid-sdd/commit/7d68609a3536fa7d0416f3aaa32f8f54dbfeffbd))
+
 ## [0.2.1](https://github.com/gadz82/orchid-sdd/compare/v0.2.0...v0.2.1) (2026-11-03)
 
 
