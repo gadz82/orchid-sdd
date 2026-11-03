@@ -2,7 +2,10 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-export const SKILL_VERSION = "0.2.0";
+const packageJson = JSON.parse(
+  fs.readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+);
+export const SKILL_VERSION = packageJson.version;
 export const SCHEMA_VERSION = "1.0.0";
 
 export class OrchidError extends Error {

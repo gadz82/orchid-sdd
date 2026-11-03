@@ -66,7 +66,7 @@ test("the plugin CLI wrappers are executable and run", () => {
       encoding: "utf8",
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stdout, /^0\.2\.0/);
+    assert.match(result.stdout, /^\d+\.\d+\.\d+/);
   }
 });
 

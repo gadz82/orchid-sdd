@@ -13,7 +13,7 @@ test("help and version are explicit and side-effect free", () => {
   assert.equal(unknown.code, 2);
   const version = cli(root, "--version");
   assert.equal(version.code, 0);
-  assert.match(version.out, /^0\.2\.0/);
+  assert.match(version.out, /^\d+\.\d+\.\d+/);
 });
 
 test("setup creates a valid workspace and doctor passes", () => {

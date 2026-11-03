@@ -23,7 +23,7 @@ test("skill install targets OpenCode project paths", () => {
   const installed = path.join(root, ".opencode/skills/orchid-sdd/bin/orchid-sdd.mjs");
   const version = spawnSync(process.execPath, [installed, "--version"], { encoding: "utf8" });
   assert.equal(version.status, 0, version.stderr);
-  assert.match(version.stdout, /^0\.2\.0/);
+  assert.match(version.stdout, /^\d+\.\d+\.\d+/);
 });
 
 test("skill install targets Claude Code project skills", () => {

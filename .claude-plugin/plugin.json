@@ -1,7 +1,7 @@
 {
   "name": "orchid-sdd",
   "displayName": "orchid-sdd",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Memory-backed, specification-driven development for Claude Code. Explicit-only /orchid-sdd:run workflow with a local Node CLI.",
   "author": {
     "name": "orchid-sdd contributors"
