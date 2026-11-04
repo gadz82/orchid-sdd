@@ -1,3 +1,10 @@
+## [0.3.4](https://github.com/gadz82/orchid-sdd/compare/v0.3.3...v0.3.4) (2026-11-04)
+
+
+### Bug Fixes
+
+* **ci:** attribute release commits to the maintainer ([83af003](https://github.com/gadz82/orchid-sdd/commit/83af0031dde041339afd6aed2ed57335dc49dee9))
+
 ## [0.3.3](https://github.com/gadz82/orchid-sdd/compare/v0.3.2...v0.3.3) (2026-11-04)
 
 
