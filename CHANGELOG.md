@@ -1,3 +1,10 @@
+## [0.3.3](https://github.com/gadz82/orchid-sdd/compare/v0.3.2...v0.3.3) (2026-11-04)
+
+
+### Bug Fixes
+
+* **release:** retry after transient notes ref rejection ([93163ad](https://github.com/gadz82/orchid-sdd/commit/93163adf55b4f5adbb00426baf78042ba116c8c9))
+
 ## [0.3.2](https://github.com/gadz82/orchid-sdd/compare/v0.3.1...v0.3.2) (2026-11-04)
 
 
