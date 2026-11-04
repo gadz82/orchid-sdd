@@ -1,3 +1,10 @@
+## [0.3.2](https://github.com/gadz82/orchid-sdd/compare/v0.3.1...v0.3.2) (2026-11-04)
+
+
+### Bug Fixes
+
+* **skill:** enrich governance contracts and preset examples ([84793d0](https://github.com/gadz82/orchid-sdd/commit/84793d0d417456f735478aa987ca5320b0e9240c))
+
 ## [0.3.1](https://github.com/gadz82/orchid-sdd/compare/v0.3.0...v0.3.1) (2026-11-04)
 
 
