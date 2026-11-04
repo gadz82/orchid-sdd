@@ -1,3 +1,10 @@
+## [0.3.1](https://github.com/gadz82/orchid-sdd/compare/v0.3.0...v0.3.1) (2026-11-04)
+
+
+### Bug Fixes
+
+* **skill:** enforce feature branch choice and prompt branch cleanup ([b6d8c45](https://github.com/gadz82/orchid-sdd/commit/b6d8c45bf0b4e2a232a2041ba47dc9dbea2ef319))
+
 # [0.3.0](https://github.com/gadz82/orchid-sdd/compare/v0.2.1...v0.3.0) (2026-11-03)
 
 
