@@ -91,7 +91,7 @@ function validateTitle(raw, maxChars) {
 
 function nextAction(phase) {
   const actions = {
-    intent: "Write intent/prd.md and intent/trd.md, then `orchid-sdd gate pass G1 --evidence intent/prd.md`.",
+    intent: "Ask whether to create a feature branch and which base (main/develop); write intent/prd.md and intent/trd.md, then `orchid-sdd gate pass G1 --evidence intent/prd.md`.",
     discovery: "Apply steering, capture discovery/Gherkin/questionnaires, write discovery/steering.md; then `orchid-sdd gate pass G2 --evidence discovery/gherkin`.",
     assessment: "Run the impact lenses and negotiation; then `orchid-sdd gate pass G3 --evidence assessment/negotiation.md`.",
     planning: "Generate the prompt DAG and cost estimate; then `orchid-sdd gate pass G4 --evidence plan/plan.json`.",

@@ -25,7 +25,8 @@ Implementers, reviewers, and assessment lenses run as subagents with fresh conte
 - The CLI is the only writer of state, events, manifest, indexes, and the matrix.
 - Never edit `.knowledge/**`, `manifest.jsonld`, or the index files by hand.
 - Deterministic operations go through the CLI: setup, record, index, lint, gates, close.
-- Code reaches the default branch only at closure. Build merges go to the integration branch.
+- Code reaches the default branch only at closure. Build merges go to the iteration's
+  feature/integration branch, or to the current branch when no feature branch was chosen.
 
 # User-facing output
 
@@ -116,7 +117,7 @@ A gate passes only with evidence. Never pass a gate on a promise.
 | G4 Plan | valid DAG, disjoint waves, coverage, cost estimate within budget | yes |
 | G5 Prompt | acceptance met, tests green, CR passed, anchors/docblocks valid, merged to integration | per prompt, no |
 | G6 Logic review | scenarios verified; steering review complete; no open business or blocking steering findings; scope matches intent | yes |
-| G7 Closure | prompts done/waived; audit archived; integration merged; release notes | yes |
+| G7 Closure | prompts done/waived; audit archived; feature/integration merged to base or current branch already base; prompt branches deleted; release notes | yes |
 | G8 Handover | HANDOVER.md + tour.md verified | yes |
 
 Use `--evidence <iteration-relative path>` or `--note "why"`; both are logged.
@@ -156,6 +157,11 @@ before G1.
 
 Artifacts: `intent/title.md`, `intent/prd.md`, `intent/trd.md`.
 
+- Branch strategy: before implementation, ask whether to create a feature branch. If yes,
+  ask the base branch (`main`/`develop`; default `project.default_branch`, or `develop` for
+  Git-flow) and record the answer in `intent/trd.md`. Use one feature/integration branch for
+  the iteration; do not create both a feature branch and a separate integration branch. If
+  the answer is no, use the current branch of each affected repo.
 - Validate the title: ≤500 chars, names subject + change + outcome. If vague, ask at most
   five clarifying questions with examples.
 - PRD: problem, users, current behaviour, desired outcome, flows, business rules, metrics,
@@ -223,11 +229,13 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 
 ## Phase 5 — Build and adversarial CR
 
-- Select ready prompts; create a worktree and branch `orchid/<iteration>/<prompt-id>`.
+- Select ready prompts. Create one worktree and one temporary branch
+  `orchid/<iteration>/<prompt-id>` per prompt; never reuse a prompt branch.
 - Run `orchid-sdd route --phase build --prompt <prompt-id>` before execution and alert the user
   on `unknown` or `mismatch`.
 - Record the prompt with `orchid-sdd prompt start <prompt-id> --step implement`; advance safe
-  steps with `prompt step` and finish with `prompt complete|fail|waive`.
+  steps with `prompt step`. Finish with `prompt complete|fail|waive` only after tests, CR,
+  merge, and branch cleanup.
 - Give each implementer a context pack, not the repository.
 - Keep inline comments why-only; update the anchor and docblock for significant units, with
   history in the docblock.
@@ -237,10 +245,16 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
   S-size work; independence and the rubric are unchanged. Check active steering rules and cite
   violations in `reviews/steering.md`.
 - Fix loop up to `max_fix_loops`; then `escalated`: accept with ADR, split, or revert.
-- Merge to `orchid/<iteration>/integration` in wave order. Do not merge to the default branch
-  during build unless an active repository steering rule explicitly permits direct mainline
-  integration and records the evidence.
-- A prompt is done only when acceptance, tests, CR, anchors/docblocks, and the matrix agree.
+- Merge to the iteration's feature/integration branch in wave order, or to the current branch
+  when the user chose no feature branch. Do not merge to the default branch during build
+  unless an active repository steering rule explicitly permits direct mainline integration
+  and records the evidence.
+- Immediately after CR passes and the merge lands, remove the prompt worktree
+  (`git worktree remove <path>`) and delete its temporary branch
+  (`git branch -D orchid/<iteration>/<prompt-id>`). This is mandatory: a prompt is not done
+  while its worktree or branch still exists. Clean up failed and waived prompts the same way.
+- A prompt is done only when acceptance, tests, CR, anchors/docblocks, branch cleanup, and the
+  matrix agree.
 
 ## Phase 6 — Logic review (PM)
 
@@ -263,9 +277,13 @@ Artifacts: `reviews/logic-review.md`, `reviews/steering-review.md`.
 ## Phase 7 — Closure
 
 - Confirm every prompt is `done` or `waived`; tests green; lint/index current.
+- Verify branch hygiene: no prompt worktrees and no `orchid/<iteration>/<prompt-id>`
+  branches remain.
 - Move prompts, bus, and runs to `audit/`; keep the matrix as the index.
-- Write `release-notes.md`; merge integration to the default branch per
-  `execution.release_strategy`; tag/freeze the iteration.
+- Write `release-notes.md`; merge the feature/integration branch to the chosen base per
+  `execution.release_strategy`, then delete it unless repository policy explicitly requires
+  retention and records it. If no feature branch was used, the current branch is already the
+  base.
 - Mark closed and rebuild the manifest. A closed iteration is immutable.
 - If it will not ship, use `orchid-sdd abandon "<reason>"` instead.
 - After closure, ask: **Do you want to start the technical handover?** Wait for the
@@ -295,8 +313,8 @@ explicit project decisions that must be checked and cited.
   language example and adapt it to the project’s real conventions.
 - Discovery converts applicable rules into requirements, scenarios, questions, assumptions, or
   ADR-backed exceptions. It does not review implementation style.
-- Logic review verifies every active rule against the integration branch, records a verdict and
-  evidence in `reviews/steering-review.md`, and stops on an unresolved blocking rule.
+- Logic review verifies every active rule against the chosen integration target, records a
+  verdict and evidence in `reviews/steering-review.md`, and stops on an unresolved blocking rule.
 - Do not enable competing architecture, style-tool, or repository presets. An exception is an
   ADR, not a silent waiver.
 - The CLI validates references, but the agent owns semantic compliance. `steering context`

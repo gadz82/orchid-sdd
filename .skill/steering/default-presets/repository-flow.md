@@ -16,17 +16,23 @@ The project must declare one repository workflow and use it consistently:
 - **XP mainline:** direct integration to main is allowed only for small, tested, reversible
   changes with the configured review or pairing evidence.
 
-If no repository preset is active, orchid-sdd's default build flow uses an integration branch and
-does not merge to the default branch during build. If `repository-trunk-based`,
-`repository-gitflow`, or `repository-xp-mainline` is active, that preset is authoritative for
-the concrete branch flow; this core rule checks that the declared workflow and the actual
-commands agree. A project selecting XP mainline must also update its execution and release
-configuration and record the decision in an ADR.
+If no repository preset is active, orchid-sdd's build flow uses the iteration's
+feature/integration branch only when the user opted in; otherwise prompt branches merge into
+the current branch. The default branch is not touched during build. If
+`repository-trunk-based`, `repository-gitflow`, or `repository-xp-mainline` is active, that
+preset is authoritative for the concrete branch flow; this core rule checks that the declared
+workflow and the actual commands agree. A project selecting XP mainline must also update its
+execution and release configuration and record the decision in an ADR.
 
 # Checks
 
 - The default branch is named and protected by policy.
 - The branch owner and merge target are clear before work starts.
+- A feature branch is created only when the user asks for one; otherwise work stays on the
+  current branch.
+- Each prompt uses one disposable worktree and temporary branch, deleted immediately after CR
+  and merge.
+- No orphan `orchid/<iteration>/<prompt-id>` branch or worktree remains at G5 or closure.
 - Changes are small enough to review and reverse.
 - Commit messages identify the requirement or prompt when the project uses traceability.
 - Direct pushes to the default branch are either explicitly allowed by the selected preset or
@@ -37,12 +43,14 @@ configuration and record the decision in an ADR.
 
 # Evidence
 
-- Discovery: record the workflow and any repository constraints in `discovery/steering.md`.
+- Discovery: record the workflow, feature-branch decision, and base branch in
+  `discovery/steering.md`.
 - Assessment: note branch/release impact and rollback strategy.
-- Build: branch names, commits, and merge target are visible in the prompt report.
+- Build: branch names, worktree path, commits, merge target, and branch deletion are visible
+  in the prompt report.
 - Code review: review the integration diff, not the implementer’s local branch.
-- Logic review: confirm the delivered change is on the expected branch and no stray merge or
-  release action occurred.
+- Logic review: confirm the delivered change is on the expected branch; no prompt branch,
+  worktree, or stray merge remains.
 
 # Exceptions
 

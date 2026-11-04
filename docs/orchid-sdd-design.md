@@ -21,7 +21,7 @@
 2. Keep **intent, discovery, and assessment separate**; do not ask technical personas to define business meaning, or business personas to estimate code impact.
 3. Make the manifest a **generated projection of append-only events**, not a hand-edited JSON file.
 4. Document code in **three tiers**: a one-line `ORCHID-MEM` anchor, a Markdown docblock, and the manifest graph.
-5. Turn work into **prompt contracts** with dependencies, disjoint write scopes, tests, and acceptance commands; parallelism is proven by the plan, code lands on an integration branch, and the default branch is touched only at closure unless an explicit XP-mainline steering rule permits otherwise.
+5. Turn work into **prompt contracts** with dependencies, disjoint write scopes, tests, and acceptance commands; parallelism is proven by the plan, code lands on the iteration's feature/integration branch when the user opts in (otherwise on the current branch), and the default branch is touched only at closure unless an explicit XP-mainline steering rule permits otherwise.
 6. Review with **independent, persona-routed adversarial CR**, then a separate **PM logic review** against Gherkin.
 7. Treat personas as **role contracts** (phase, authority, triggers), not chatbots; treat the constitution as a **layered, lockable source of truth** for *how* code is written.
 8. Make the skill **explicit-only, portable, and self-contained**: an explicit command (`/orchid-sdd` in OpenCode, `orchid-sdd` at the CLI) is the only entry point, and the skill package is versioned separately from project knowledge.
@@ -356,8 +356,8 @@ execution:
   max_parallel: 4
   isolation: worktree          # worktree | clone | branch (§11.2)
   require_clean_tree: true
-  integration_branch: "orchid/{iteration}/integration"
-  release_strategy: squash     # squash | pr | none — how integration reaches the default branch at G7
+  integration_branch: "orchid/{iteration}/integration"  # feature branch when the user opts in; otherwise the current branch
+  release_strategy: squash     # squash | pr | none — how the iteration branch reaches its base at G7
   merge: orchestrator
   max_fix_loops: 3
   test_commands:
@@ -503,9 +503,9 @@ The orchestrator is the primary agent session in the host harness — in OpenCod
 | **G2** | Discovery signed off | Business impact, boundaries, Gherkin, traceability, zero blocking questions or recorded `Assumption` nodes; PM sign-off | Yes, if answers changed scope |
 | **G3** | Assessment decided | Impact map, contracts, regressions, options, ADRs; go/no-go decision | Yes |
 | **G4** | Plan approved | Valid DAG, disjoint waves, complete coverage, matrix generated, cost estimate within budget or explicitly overridden | Yes |
-| **G5** | Prompt done | Acceptance met, tests pass in a clean environment, CR passed, anchors/docblocks valid, merged to the integration branch | No, per prompt |
+| **G5** | Prompt done | Acceptance met, tests pass in a clean environment, CR passed, anchors/docblocks valid, merged to the chosen integration target, prompt worktree/branch deleted | No, per prompt |
 | **G6** | Logic review passed | Scenarios verified; no open business findings; scope matches intent | Yes |
-| **G7** | Closure complete | All prompts done or waived; manifest/index rebuilt; transients archived; integration merged to the default branch; release notes written | Yes |
+| **G7** | Closure complete | All prompts done or waived; manifest/index rebuilt; transients archived; feature/integration merged to its base (or current branch already base); prompt branches deleted; release notes written | Yes |
 | **G8** | Handover accepted | Handover and tour complete; links resolve; human acknowledges | Yes |
 
 Gates are enforced by the orchestrator, not by prompt instructions alone. A command that would cross a gate without evidence fails with the missing evidence listed.
@@ -561,7 +561,7 @@ The skill exposes one explicit entry point with subcommands. Running `/orchid-sd
 | `/orchid-sdd discover` | 2 | PM-led requirements capture, Gherkin, consistency scan, questionnaires | G2 |
 | `/orchid-sdd assess` | 3 | Parallel technical impact analysis, negotiation, ADRs, go/no-go | G3 |
 | `/orchid-sdd plan` | 4 | Decompose into prompts, validate the DAG, generate the matrix | G4 |
-| `/orchid-sdd build [--all\|--wave N\|--prompt P-003]` | 5 | Execute ready prompts, verify tests, run adversarial CR, merge to the integration branch | G5 per prompt |
+| `/orchid-sdd build [--all\|--wave N\|--prompt P-003]` | 5 | Execute ready prompts, verify tests, run adversarial CR, merge to the feature/integration or current branch, delete prompt branches | G5 per prompt |
 | `/orchid-sdd review` | 6 | PM logic review against PRD/TRD/Gherkin; generate follow-up prompts if needed | G6 |
 | `/orchid-sdd close` | 7 | Freeze, archive transients, rebuild manifest/index, write release notes | G7 |
 | `/orchid-sdd handover` | 8 | Generate and verify the human tutorial | G8 |
@@ -710,6 +710,8 @@ intent/
 | "Improve authentication" | "Add passkey login to the customer portal for returning users, keeping passwords as fallback for 90 days" |
 | "Fix performance" | "Reduce checkout API p95 latency from 1.8s to under 600ms for carts with more than 50 items" |
 | "Add Redis" | "Introduce a shared cache for product catalog reads to remove the repeated database fan-out during peak traffic" |
+
+**Branch strategy.** Before implementation, ask whether to create a feature branch. If yes, ask the base branch (`main`/`develop`; default `project.default_branch`, or `develop` for Git-flow) and record the answer in the TRD. The feature branch is the iteration's single integration target; do not create a separate feature branch and integration branch. If no, use each affected repository's current branch. Prompt branches are always disposable and are deleted after CR and merge.
 
 **PRD contents:** problem, affected users and personas, current behaviour, desired outcome, primary and alternate flows, business rules, success metrics, non-goals, assumptions, risks, open questions. No technology choices.
 
@@ -913,16 +915,16 @@ plan/                  # the prompt folder for this spec
 
 1. **Select ready prompts** whose dependencies are done and whose write scopes are disjoint.
 2. **Resolve routing** with `orchid-sdd route --phase build --prompt <prompt-id>`; if the current agent/model is unknown or mismatched, notify the user and do not switch automatically.
-3. **Isolate** each prompt in a worktree and branch (`orchid/<iteration>/<prompt-id>`), following the isolation and knowledge protocol (§11.2).
+3. **Isolate** each prompt in one disposable worktree and temporary branch (`orchid/<iteration>/<prompt-id>`), following the isolation and knowledge protocol (§11.2). Never reuse a prompt branch.
 4. **Build a context pack**, not a repository dump: the prompt, relevant spec slice, constitution sections, 1-hop memory, affected code, test commands, and known constraints.
 5. **Implement** the prompt, run the tests, keep inline comments why-only, update or create the anchor and docblock (including `History`), and write run artifacts and any message to the outbox; the orchestrator copies both back when the prompt completes.
 6. **Verify independently:** the orchestrator runs the acceptance commands in a clean environment. The implementer's claim is not evidence.
 7. **Review adversarially** with a fresh-context reviewer, routed by changed paths and topics.
 8. **Fix loop** up to `max_fix_loops`. A prompt that exhausts the loop enters `escalated` (§11.5): arbitration, split, or revert. A prompt never merges on a promise to fix later.
-9. **Merge into the integration branch** (`orchid/<iteration>/integration`) in wave order, through the orchestrator; the default branch is untouched during build unless an XP-mainline steering rule explicitly permits otherwise. Update the matrix and emit events. Commit and PR metadata carry the iteration and prompt IDs, the matrix slice, test evidence, and the CR verdict.
+9. **Merge into the iteration's feature/integration branch**, or into the current branch when the user chose no feature branch, in wave order through the orchestrator; the default branch is untouched during build unless an XP-mainline steering rule explicitly permits otherwise. Immediately after the merge lands, remove the prompt worktree and delete its temporary branch. Cleanup is mandatory; a prompt is not done while either exists. Update the matrix and emit events. Commit and PR metadata carry the iteration and prompt IDs, the matrix slice, test evidence, and the CR verdict.
 10. **Refresh indexes at wave boundaries**, not on every file write.
 
-**Exit:** G5 for each prompt — acceptance met, tests green, CR passed, anchors/docblocks valid, merged to the integration branch, matrix updated. The iteration can proceed to logic review only when all prompts are done or explicitly waived.
+**Exit:** G5 for each prompt — acceptance met, tests green, CR passed, anchors/docblocks valid, merged to the chosen integration target, prompt worktree/branch deleted, matrix updated. The iteration can proceed to logic review only when all prompts are done or explicitly waived.
 
 ### Phase 6 — Logic review
 
@@ -930,7 +932,7 @@ plan/                  # the prompt folder for this spec
 
 **Lead:** PM, with any persona configured for `phases.logic_review`.
 
-**Inputs:** PRD, TRD, Gherkin, test evidence, the integration branch diff, manifest history, the active steering rules and examples, and the prompt outcomes. The PM does not replace the technical reviewer; steering verification may cite specialist evidence, but the PM owns the final coverage statement.
+**Inputs:** PRD, TRD, Gherkin, test evidence, the chosen integration target diff, manifest history, the active steering rules and examples, and the prompt outcomes. The PM does not replace the technical reviewer; steering verification may cite specialist evidence, but the PM owns the final coverage statement.
 
 **Checks:**
 
@@ -940,7 +942,7 @@ plan/                  # the prompt folder for this spec
 - error states, copy, accessibility, and edge cases match the intent;
 - prior regressions are still guarded;
 - every active steering rule has a verdict and current evidence: `satisfied`, `not applicable`, `finding`, or `waived`;
-- style gates ran on the integration branch and no new suppression hides a violation;
+- style gates ran on the chosen integration target and no new suppression hides a violation;
 - repository flow and architecture boundaries match the declared rules;
 - the implementation is explainable to a non-engineer.
 
@@ -966,6 +968,7 @@ The “explainable to a non-engineer” check verifies that the PM can state the
 - the full test suite is green in a clean environment;
 - anchors and docblocks resolve; `lint --check` and `index --check` pass;
 - the manifest matches the artifacts;
+- no prompt worktree or `orchid/<iteration>/<prompt-id>` branch remains;
 - release notes and rollback notes exist.
 
 **Actions:**
@@ -975,7 +978,8 @@ The “explainable to a non-engineer” check verifies that the PM can state the
 - freeze the archived prompts and all artifacts by hash;
 - rebuild the root `manifest.jsonld` and all indexes;
 - write `release-notes.md`: changes, breaking changes, migrations, rollback, version bump;
-- merge the integration branch into the default branch per `execution.release_strategy` (squash merge, release PR, or manual);
+- merge the feature/integration branch into the chosen base branch per `execution.release_strategy` (squash merge, release PR, or manual); when no feature branch was used, the current branch is already the base;
+- delete the feature/integration branch after a successful merge unless repository policy explicitly requires retention and records it;
 - tag or prepare the release according to project convention;
 - mark the iteration `closed`; it becomes read-only;
 - ask whether the human wants to start the technical handover, and wait for the answer before Phase 8.
@@ -1873,6 +1877,8 @@ This is the difference between "we hope they don't collide" and "the plan proves
 
 The knowledge protocol applies in every mode: agents never write `.knowledge`, and the context pack stays authoritative regardless of where the checkout lives.
 
+**Branch lifecycle.** Prompt worktrees and temporary branches are disposable. Create one per prompt (`orchid/<iteration>/<prompt-id>`), merge it, then remove the worktree and delete the branch immediately after CR passes. A leftover prompt branch is a build failure, not cleanup debt. The iteration has at most one long-lived feature/integration branch, and only when the user asked for one; otherwise prompt branches merge into the current branch of each affected repository. At closure, verify no prompt branch or worktree remains, merge the feature/integration branch to its chosen base, and delete it unless repository policy explicitly requires retention.
+
 ```mermaid
 flowchart TB
   W["wave N ready"] --> CP["orchestrator: context pack + knowledge snapshot into worktree"]
@@ -1881,7 +1887,7 @@ flowchart TB
   TV -->|fail| IM
   TV -->|pass| RV["reviewer agent: adversarial CR, fresh context"]
   RV -->|findings| IM
-  RV -->|pass| MG["CLI: merge to integration branch"]
+  RV -->|pass| MG["CLI: merge to feature/integration or current branch"]
   MG --> UP["orchestrator: drain bus, update matrix, emit events"]
   UP --> W
 ```
@@ -2820,7 +2826,7 @@ One-line pointers to every machine-checkable rule, for implementers who should n
 | Implementer never reviews its own work | §11.5 |
 | CR blocking severities gate; escalation after `max_fix_loops` | §11.5 |
 | Logic review capped at `max_loops`; follow-up or waived risk | §11.6 |
-| Merge to the integration branch only; default branch at G7, unless an XP-mainline steering rule permits direct mainline | §6 Phases 5, 7, §9.4 |
+| Merge to the chosen integration target only; default branch at G7, unless an XP-mainline steering rule permits direct mainline | §6 Phases 5, 7, §9.4 |
 | External sources are untrusted snapshots with provenance | §10 |
 | `doctor --ci` is offline; `--online` for network probes | §10.2 |
 | Audit is permanent; deletion is a human-approved event | §7.9 |

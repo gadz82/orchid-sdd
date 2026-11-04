@@ -27,5 +27,11 @@ What could break; how it is guarded.
 ## Versioning and release
 Compatibility, flags, rollout, rollback.
 
+## Branch strategy
+- Feature branch: yes/no
+- Base branch: main/develop
+- Integration target: <feature branch, or the current branch when no feature branch is used>
+- Prompt branches: one disposable worktree/branch per prompt, deleted after CR and merge
+
 ## Criticalities
 Top risks and open technical questions.

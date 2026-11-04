@@ -916,13 +916,19 @@ Every referenced persona must exist and be enabled.
 | `execution.max_parallel` | `4` | Maximum simultaneous prompts/reviews | Agent |
 | `execution.isolation` | `worktree` | `worktree`, `clone`, or `branch`; `branch` requires `max_parallel: 1` | Agent/CLI (doctor) |
 | `execution.require_clean_tree` | `true` | `start` refuses a dirty root/repo | CLI |
-| `execution.integration_branch` | `orchid/{iteration}/integration` | Build merge target | Agent |
+| `execution.integration_branch` | `orchid/{iteration}/integration` | Feature/integration branch used only when the user opts in; otherwise prompts merge into the current branch | Agent |
 | `execution.release_strategy` | `squash` | `squash`, `pr`, or `none` at closure | Agent/Policy |
 | `execution.merge` | `orchestrator` | Who performs merges | Agent/Policy |
 | `execution.max_fix_loops` | `3` | CR fix attempts before escalation | Agent |
 | `execution.test_commands.unit` | profile default | Unit test command | Agent/Setup |
 | `execution.test_commands.integration` | profile default | Integration test command | Agent/Setup |
 | `execution.test_commands.e2e` | profile default | End-to-end test command | Agent/Setup |
+
+At Intent, the skill asks whether to create a feature branch and which base branch to use
+(`main`/`develop`; default `project.default_branch`, or `develop` for Git-flow). If the answer
+is no, it stays on each affected repository's current branch. Every prompt uses one disposable
+worktree and temporary branch (`orchid/<iteration>/<prompt-id>`), deleted immediately after CR
+and merge; closure verifies that no prompt branch or worktree remains.
 
 ### Reviews
 
@@ -1189,7 +1195,7 @@ example fit (closest approved shape), and conflict check (requirements that cont
 blocking rule). Record them in `discovery/steering.md`; G2 can cite that file.
 
 **Suggested Logic Review rules.** Use `logic-review-steering`: rule coverage (every active
-blocking rule has a verdict), evidence freshness (integration branch, not a local branch),
+blocking rule has a verdict), evidence freshness (chosen integration target, not a throwaway prompt branch),
 scope integrity (no deleted tests or hidden suppressions), exception integrity (waivers name
 owner and expiry), and behavioral fit (the delivered behavior still matches the requirement).
 Record them in `reviews/steering-review.md`; G6 can cite that file.
