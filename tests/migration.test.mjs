@@ -14,6 +14,7 @@ test("migrate scan detects the workspace and legacy knowledge", () => {
   assert.equal(scan.existing.adr, 1);
   assert.ok(scan.knowledge.files >= 4);
   assert.equal(scan.suggested.workspace, true);
+  assert.ok(scan.languagesByName.some((entry) => entry.language === "python"));
 });
 
 test("migrate init backs up legacy assets and scaffolds a workspace", () => {
@@ -48,6 +49,13 @@ test("migrate init backs up legacy assets and scaffolds a workspace", () => {
   );
   assert.match(codePrompt, /ORCHID-MEM: <uuid> — <short behaviour>/);
   assert.match(codePrompt, /History/);
+  const examplesPrompt = fs.readFileSync(
+    path.join(root, ".orchid/migration/prompts/04-code-examples.md"),
+    "utf8",
+  );
+  assert.match(examplesPrompt, /Approve these code-style examples\?/);
+  assert.match(examplesPrompt, /\.orchid\/steering\/examples\/<language>\//);
+  assert.ok(fs.existsSync(path.join(root, ".orchid/migration/prompts/05-finalize.md")));
 
   const status = cli(root, "migrate", "status", "--json");
   assert.equal(status.code, 0, status.all);

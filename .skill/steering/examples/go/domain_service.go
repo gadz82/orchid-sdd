@@ -1,3 +1,8 @@
+// Placement (illustrative):
+//   internal/domain/user.go                    -> User
+//   internal/ports/user_repository.go          -> UserRepository
+//   internal/application/deactivate_user.go    -> DeactivateUser
+
 package domain
 
 import (

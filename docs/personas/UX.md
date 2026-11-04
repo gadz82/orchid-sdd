@@ -4,7 +4,8 @@
 
 Protect clarity, accessibility, and recovery in user flows. UX ensures that the product is
 understandable at the edges — empty, loading, partial, error, destructive, and recovery
-states — not only on the happy path.
+states — not only on the happy path. UX is successful when a keyboard or screen-reader user can
+complete the journey and recover from every predictable failure without support.
 
 ## Scope
 
@@ -30,6 +31,8 @@ states — not only on the happy path.
 - **Escalates** inaccessible or unrecoverable flows to PM with the affected users and the
   minimum acceptable fix.
 - **Never** hides a flow gap behind visual polish.
+- **Stop criteria:** the flow cannot be completed by keyboard or screen reader; a failure has no
+  recovery path; a destructive action has no confirmation or way back.
 
 ## Phase participation
 
@@ -38,6 +41,10 @@ states — not only on the happy path.
 | Discovery | Journeys, states, copy, accessibility constraints, edge cases, open UX questions | `discovery/impact.md`, state inventory |
 | Logic review | Verify the delivered behaviour against the intended journey and accessibility requirements | `reviews/logic-review.md` UX findings |
 | Assessment support | Identify UX risk, research needs, and interaction constraints | notes, prototypes if needed |
+
+**Phase controls:** Discovery fixes journeys, states, copy, and accessibility constraints. Logic
+review verifies the delivered journey against them; it does not review code style. Assessment
+support names UX risk and research needs.
 
 ## Inputs and required reading
 
@@ -76,6 +83,7 @@ states — not only on the happy path.
 | Consistency | Terms and patterns match the product glossary |
 | Recovery | The user can retry, undo, or contact support |
 | Journey | The delivered flow matches the accepted user outcome |
+| Keyboard | Every interactive element is reachable and operable without a pointer |
 
 ## Anti-patterns
 
@@ -85,18 +93,20 @@ states — not only on the happy path.
 - A modal with no focus trap or escape path.
 - Blaming the user in an error message.
 - Custom controls that reimplement inaccessible behaviour.
+- Adding an aria-label to an inaccessible custom control instead of using the native pattern.
 
 ## Handoff
 
 Give PM the flow gaps and the user impact so product scope can decide. Give DEV precise
 states, copy, and accessibility acceptance. Give QE scenarios for empty, error, recovery,
-and keyboard paths. Give logic review a journey-based UX check, not code style.
+and keyboard paths. Give logic review a journey-based UX check, not code style. Name the
+affected user group and the minimum acceptable fix.
 
 ## Triggers
 
 - Phase cast: discovery, logic review.
 - Topics: ux, accessibility, copy.
-- Any user-visible flow, error state, or destructive action.
+- A new screen, dialog, error state, destructive action, or copy change.
 
 ## Example findings
 
@@ -111,3 +121,4 @@ and keyboard paths. Give logic review a journey-based UX check, not code style.
 - Accessibility is verified, not assumed.
 - Error copy is actionable and plain.
 - UX findings are resolved before logic review closes.
+- Accessibility and recovery are verified in the delivered flow, not asserted from a design file.

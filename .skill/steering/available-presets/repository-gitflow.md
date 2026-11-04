@@ -13,6 +13,22 @@ Use Git-flow. Feature branches merge into `develop`; releases are stabilized on 
 branch; hotfixes branch from the production tag or main branch and are merged back. The exact
 branch names must be declared in the repository policy.
 
+# When to use
+
+- The product supports multiple versions or needs a stabilization window.
+- Releases are cut from a release branch, not directly from every feature merge.
+- Hotfixes must reach more than one long-lived branch.
+
+# Conflicts
+
+- Do not enable with trunk-based or XP mainline presets. The branch graphs contradict each
+  other. The active repository preset overrides the core `repository-flow` default; choose one.
+
+# Adds to the defaults
+
+- Default `repository-flow` only requires a declared flow; this preset adds feature/develop/
+  release/hotfix branch names, merge targets, and merge-back rules.
+
 # Checks
 
 - Every branch name identifies its type (feature, release, hotfix).
@@ -24,4 +40,4 @@ branch names must be declared in the repository policy.
 # Evidence
 
 Record the branch graph, merge target, tag, and release notes in the prompt and closure
-artifacts.
+artifacts. Cite the branch names in `discovery/steering.md` and the merge commit in code review.

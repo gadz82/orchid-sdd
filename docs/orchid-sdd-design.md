@@ -895,7 +895,7 @@ plan/                  # the prompt folder for this spec
 
 - the dependency graph is acyclic;
 - every requirement and scenario has coverage;
-- every prompt has acceptance criteria and tests;
+- every prompt has acceptance criteria and tests, and cites the project code examples that constrain it;
 - no write-glob overlap inside a wave;
 - prompt size is reviewable (configurable file/line budget);
 - all depended-on decisions are accepted, not proposed;
@@ -917,7 +917,7 @@ plan/                  # the prompt folder for this spec
 2. **Resolve routing** with `orchid-sdd route --phase build --prompt <prompt-id>`; if the current agent/model is unknown or mismatched, notify the user and do not switch automatically.
 3. **Isolate** each prompt in one disposable worktree and temporary branch (`orchid/<iteration>/<prompt-id>`), following the isolation and knowledge protocol (§11.2). Never reuse a prompt branch.
 4. **Build a context pack**, not a repository dump: the prompt, relevant spec slice, constitution sections, 1-hop memory, affected code, test commands, and known constraints.
-5. **Implement** the prompt, run the tests, keep inline comments why-only, update or create the anchor and docblock (including `History`), and write run artifacts and any message to the outbox; the orchestrator copies both back when the prompt completes.
+5. **Implement** the prompt following the active project code examples for the language, run the tests, keep inline comments why-only, update or create the anchor and docblock (including `History`), and write run artifacts and any message to the outbox; the orchestrator copies both back when the prompt completes. A deviation from a project example needs an ADR.
 6. **Verify independently:** the orchestrator runs the acceptance commands in a clean environment. The implementer's claim is not evidence.
 7. **Review adversarially** with a fresh-context reviewer, routed by changed paths and topics.
 8. **Fix loop** up to `max_fix_loops`. A prompt that exhausts the loop enters `escalated` (§11.5): arbitration, split, or revert. A prompt never merges on a promise to fix later.
@@ -1653,6 +1653,10 @@ and the actual commands agree.
 
 The `examples/` directory contains the same boundary/DI shape in TypeScript, Go, Python, PHP,
 Rust, Java, and Ruby. They demonstrate language idioms rather than prescribing a single syntax.
+During migration, the agent proposes project-specific examples for every significant language,
+waits for explicit approval, then writes a blocking `code-examples` override under
+`.orchid/steering/`. Build and code review must follow the approved example for the language;
+a deviation requires an ADR.
 
 **Discovery application.** `steering context --phase discovery` returns the active rules and
 the artifact `discovery/steering.md`. The PM converts applicable rules into requirements,
@@ -2611,7 +2615,7 @@ entries back to their original paths.
 
 ### 22.4 LLM reconstruction
 
-The CLI writes `.orchid/migration/PLAN.md` and four prompts. The agent must:
+The CLI writes `.orchid/migration/PLAN.md` and five prompts. The agent must:
 
 1. **Inventory** — read `scan.json`, the restructured legacy tree under `input/legacy/`,
    ADRs, specs, plans, prompts, progress, and docs; write `INVENTORY.md` with evidence and
@@ -2623,10 +2627,16 @@ The CLI writes `.orchid/migration/PLAN.md` and four prompts. The agent must:
 3. **Reconstruct code memory** — per repo, use `git log`, `git log --follow`, tags, release
    notes, and current code to identify significant units; add `ORCHID-MEM` anchors and
    UUID-named docblocks; record `CodeUnit` nodes with `--repo` and `--code`.
-4. **Verify legacy organization** — `migrate init` has already moved reusable material
+4. **Propose project code-style examples** — analyze the current code for every significant
+   language in `scan.json.languagesByName`; write `CODE-EXAMPLES-PROPOSAL.md` with one to three
+   examples per language and wait for explicit human approval. After approval, write the
+   examples under `.orchid/steering/examples/<language>/` and a blocking
+   `.orchid/steering/code-examples.md` override. If approval is refused, record the decision and
+   leave the default rule unchanged.
+5. **Verify legacy organization** — `migrate init` has already moved reusable material
    into `<knowledge_folder>/input/legacy/` after the backup, preserving the old taxonomy.
    The legacy root directories are no longer present; the backup remains the rollback copy.
-5. **Validate and finalize** — `index`, `lint`, `doctor`, then `migrate finalize`.
+6. **Validate and finalize** — `index`, `lint`, `doctor`, then `migrate finalize`.
 
 No fabricated memories: ambiguous evidence becomes an `Assumption` node and a question.
 The agent must not edit the manifest directly.
@@ -2643,7 +2653,9 @@ MIGRATION.md
 │   ├── 01-inventory.md
 │   ├── 02-memory.md
 │   ├── 03-code.md
-│   └── 04-finalize.md
+│   ├── 04-code-examples.md
+│   └── 05-finalize.md
+├── CODE-EXAMPLES-PROPOSAL.md (after prompt 04)
 ├── STATUS.json
 └── REPORT.md (after finalize)
 ```
@@ -2672,6 +2684,8 @@ Acceptance:
 
 - every current ADR/spec has a linked memory node;
 - significant code units have anchors and docblocks;
+- project code-style examples were proposed for every significant language; approval or
+  refusal is recorded, and an approved blocking `code-examples` override resolves;
 - `index --check`, `lint`, and `doctor` pass or have documented waivers;
 - the backup exists and `BACKUP.json` is complete;
 - no legacy asset was deleted before backup verification.

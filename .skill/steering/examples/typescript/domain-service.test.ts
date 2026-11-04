@@ -1,3 +1,6 @@
+// Placement (illustrative):
+//   test/application/deactivate-user.test.ts   -> DeactivateUser test
+
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { DeactivateUser } from "./domain-service";

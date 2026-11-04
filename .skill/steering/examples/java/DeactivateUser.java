@@ -1,3 +1,8 @@
+// Placement (illustrative):
+//   src/domain/User.java                       -> User
+//   src/ports/UserRepository.java              -> UserRepository
+//   src/application/DeactivateUser.java        -> DeactivateUser
+
 import java.util.Optional;
 
 public record User(String id, String email, boolean active) {

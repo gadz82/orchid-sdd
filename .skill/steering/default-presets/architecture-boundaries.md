@@ -26,31 +26,45 @@ Domain code must not import frameworks, HTTP clients, ORMs, database drivers, UI
 provider SDKs. Application code may orchestrate domain behavior through explicit ports.
 Adapters implement those ports and contain all I/O.
 
-The choice of hexagonal, onion, or clean architecture is a project decision, not a licence
-to mix them. If the project selects a named pattern, enable its preset rule and keep one
+The choice of hexagonal, onion, or clean architecture is a project decision, not a licence to
+mix them. If the project selects a named pattern, enable its preset rule and keep one
 vocabulary for layers and boundaries.
+
+# Why
+
+A boundary without an explicit contract turns every framework change into a domain change. The
+rule keeps the domain testable without a server or database and limits the blast radius of
+transport, persistence, and vendor choices. It also makes the cost of a new dependency visible
+at review time.
 
 # Checks
 
-- Identify each boundary crossed by the change and the contract at that boundary.
-- Verify that new domain code has no framework, transport, persistence, or vendor imports.
-- Verify that adapters depend on ports, not the reverse.
-- Check that cross-boundary data is passed through explicit types, not ad-hoc maps or ORM rows.
-- Look for accidental coupling: shared mutable state, framework annotations in domain models,
-  or business logic inside controllers, migrations, or UI components.
-- If the change needs a new boundary, name the port, the adapter, and the owner in the design.
+- Each crossed boundary is named with the contract that guards it.
+- New domain code has no framework, transport, persistence, or vendor imports.
+- Adapters depend on ports; no port imports an adapter.
+- Cross-boundary data uses explicit types, not ORM rows or ad-hoc maps.
+- No business rule lives in a controller, migration, UI component, or job handler.
+- A new boundary names the port, the adapter, and the owner.
 
 # Evidence
 
-- Discovery: record affected boundaries, ports, and constraints in `discovery/steering.md`.
-- Assessment: cite the boundary decision in `assessment/steering.md` and any ADR.
-- Code review: cite file and symbol evidence in `reviews/steering.md`.
+- Discovery: affected boundaries, ports, and constraints in `discovery/steering.md`.
+- Assessment: boundary decision and ADR reference in `assessment/steering.md`.
+- Code review: file and symbol evidence in `reviews/steering.md`.
 - Logic review: confirm behaviour crosses boundaries only through the agreed contracts.
 
 # Exceptions
 
-A deliberate deviation needs an ADR that names the rule, the reason, the blast radius, and the
-review date. An exception for one prompt does not become a precedent for the next prompt.
+A deliberate deviation needs an ADR naming the rule, reason, blast radius, owner, and review
+date. The human owner approves it; one prompt's exception is not a precedent.
+
+# Example fit
+
+`../examples/typescript/hexagonal-port.ts` shows a domain-owned port and an in-memory adapter.
+`../examples/typescript/domain-service.ts` shows a use case that depends on the port, not the
+database, and has an explicit not-found failure. `../examples/typescript/domain-service.test.ts`
+replaces the adapter without a server. Use the closest language example; do not copy its
+structure blindly.
 
 # Discovery questions
 

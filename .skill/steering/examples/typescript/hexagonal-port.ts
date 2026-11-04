@@ -1,3 +1,8 @@
+// Placement (illustrative):
+//   src/domain/user.ts                         -> User
+//   src/ports/user-repository.ts               -> UserRepository
+//   src/adapters/in-memory-user-repository.ts  -> InMemoryUserRepository
+
 /**
  * An example port and its in-memory adapter.
  *

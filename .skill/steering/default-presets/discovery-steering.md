@@ -21,26 +21,35 @@ A rule that is not applicable must say why. “Not applicable” without a reaso
 Discovery does not review implementation style; it records the constraints that later phases
 will verify.
 
+# Why
+
+A project decision that never reaches a requirement or scenario disappears before Build.
+Converting steering at discovery makes the constraint testable, gives assessment the right
+questions, and prevents a late architecture or style surprise from reopening scope.
+
 # Checks
 
-- Read `steering context --phase discovery` and every referenced rule file.
-- Identify architecture boundaries, repository workflow constraints, style gates, and examples
-  that affect the requirement.
-- Add rule IDs to the relevant requirement, scenario, or questionnaire.
-- Ask the user only where the steering rule leaves a genuine product or risk choice.
-- Record deferred decisions as assumptions and state how logic review will detect them.
-- Write `discovery/steering.md` with: rule ID, applicability, constraint, evidence/owner.
-- Do not invent a technical solution in a PM-owned discovery artifact.
-
-# Suggested discovery rules
-
-- **Boundary fit:** which ports, contracts, or adapters does this requirement touch?
-- **Repository fit:** which branch, release, or environment flow does the change require?
-- **Style evidence:** which automated gates will prove the change meets the project’s style?
-- **Example fit:** which example or pattern is the closest approved shape?
-- **Conflict check:** does any requirement contradict a blocking steering rule?
+- `steering context --phase discovery` and every referenced rule file are read.
+- Each applicable rule is mapped to a requirement, scenario, question, assumption, or ADR-backed exception.
+- Each non-applicable rule has a written reason.
+- Rule IDs appear in the relevant requirement, scenario, or questionnaire.
+- Deferred decisions have an assumption, risk, and detection point.
+- `discovery/steering.md` records rule ID, applicability, constraint, evidence, and owner.
+- No technical solution is invented in a PM-owned discovery artifact.
 
 # Evidence
 
-The discovery gate may cite `discovery/steering.md` as G2 evidence. The file must be specific
-enough that a reviewer can map a requirement to a rule and see the planned proof.
+`discovery/steering.md` is the phase artifact. It must let a reviewer map a requirement to a
+rule and see the planned proof. The discovery gate may cite it as G2 evidence.
+
+# Exceptions
+
+A blocking rule may be waived only by an ADR approved by the human owner, with the rule, reason,
+blast radius, and review date. An inapplicable rule needs a reason, not a waiver.
+
+# Example fit
+
+Use `architecture-boundaries` with `../examples/typescript/hexagonal-port.ts` as a worked
+mapping: a requirement that changes user deactivation touches the `UserRepository` port, the
+in-memory adapter is illustrative, and the planned evidence is a domain-service test. Record
+that row in `discovery/steering.md`.

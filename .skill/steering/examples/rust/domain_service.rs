@@ -1,3 +1,8 @@
+// Placement (illustrative):
+//   src/domain/user.rs                         -> User
+//   src/ports/user_repository.rs               -> UserRepository
+//   src/application/deactivate_user.rs         -> DeactivateUser
+
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct User {
     pub id: String,

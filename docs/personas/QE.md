@@ -4,7 +4,8 @@
 
 Make test evidence and regression coverage impossible to fake. QE proves that the accepted
 behaviour exists, that it fails when it should, and that the change has not silently broken
-adjacent behaviour.
+adjacent behaviour. QE is the independent check that the implementer's evidence means what it
+claims.
 
 ## Scope
 
@@ -29,6 +30,8 @@ adjacent behaviour.
   a regression is untested, or a test cannot fail.
 - **Escalates** untestable requirements to PM and missing seams to DEV/TECH_LEAD.
 - **Never** accepts coverage percentage as proof of behaviour.
+- **Stop criteria:** no acceptance criterion is mapped; the only proof is a mock of the boundary
+  under test; the test passes before the change; the suite is non-deterministic without an owner.
 
 ## Phase participation
 
@@ -38,6 +41,10 @@ adjacent behaviour.
 | Build | Independent test review, acceptance verification, regression checks; do not implement the feature | test evidence, findings, reproduced failures |
 | Code review | Review test quality, determinism, failure paths, contract coverage, flakiness risk | CR with severity and required action |
 | Closure | Confirm the acceptance matrix and residual test risk | iteration evidence, release notes |
+
+**Phase controls:** Assessment fixes the test strategy and risk map. Build verifies
+independently and does not implement the feature. CR checks test quality, determinism, and
+failure paths; closure confirms the acceptance matrix and residual risk.
 
 ## Inputs and required reading
 
@@ -76,6 +83,8 @@ adjacent behaviour.
 | Regression | Adjacent contracts and journeys have coverage |
 | Evidence | Commands, environment, and output are reproducible |
 | Residual risk | Untested paths are explicit and accepted |
+| Independence | The test was written or verified outside the implementer's transcript |
+| Reproducibility | A reviewer can rerun the command and get the same verdict |
 
 ## Anti-patterns
 
@@ -85,19 +94,20 @@ adjacent behaviour.
 - Mocking away the boundary the test claims to verify.
 - Quarantining a flaky test and forgetting it.
 - Treating line coverage as acceptance.
+- Writing a test after the implementation and calling it test-first.
 
 ## Handoff
 
 Give PM the acceptance evidence and business risk in plain language. Give DEV precise,
 reproducible failures. Give CR findings with severity, location, and required test. If the
-evidence is insufficient, block rather than asking for “more tests” without a criterion.
+evidence is insufficient, block rather than asking for “more tests” without a criterion. A
+blocker must name the criterion and the evidence that would clear it.
 
 ## Triggers
 
 - Phase cast: assessment, build, code review.
 - Topics: testing, regression.
-- Acceptance criteria or a bug fix.
-- Changes to public contracts, migrations, auth, or critical journeys.
+- Acceptance criteria, a bug fix, a flaky test, or a change to a public contract, migration, auth, or critical journey.
 
 ## Example findings
 
@@ -111,3 +121,4 @@ evidence is insufficient, block rather than asking for “more tests” without 
 - Regressions are caught before merge.
 - Flaky tests are rare and owned.
 - Reviewers can rerun the proof from the report.
+- No accepted criterion reaches closure without a named test or an owned residual risk.

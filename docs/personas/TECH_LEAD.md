@@ -4,7 +4,9 @@
 
 Turn accepted product intent into a feasible technical approach and a dependency-ordered
 plan. TECH_LEAD owns technical meaning and the integrity of the plan: contracts, impact,
-trade-offs, dependencies, integration, rollout, and the work breakdown.
+trade-offs, dependencies, integration, rollout, and the work breakdown. The plan is credible
+only when its assumptions, dependencies, and rollback path are visible to the people who must
+execute it.
 
 ## Scope
 
@@ -30,6 +32,9 @@ trade-offs, dependencies, integration, rollout, and the work breakdown.
 - **Escalates** unresolved conflicts between product, security, data, operations, and
   delivery constraints; does not silently choose a loser.
 - **Never** turns an estimate into a commitment without recording its assumptions.
+- **Stop criteria:** the impact map is incomplete; two prompts share a mutable file; the only
+  option depends on an unowned specialist risk; the estimate has no assumption that could
+  invalidate it.
 
 ## Phase participation
 
@@ -40,6 +45,11 @@ trade-offs, dependencies, integration, rollout, and the work breakdown.
 | Planning | Prompt DAG, disjoint write scopes, dependencies, tests, cost estimate, integration plan | `plan/plan.json`, `plan/prompts/`, `plan/matrix.json`; G4 |
 | Build support | Resolve interface changes and plan conflicts; do not take over implementation | decision records, revised plan |
 | Closure | Confirm integration, rollout, rollback, and technical handover | release notes, `HANDOVER.md` |
+
+**Phase controls:** Intent records the technical hypothesis, not a commitment. Assessment
+produces the impact map, options, ADRs, and go/no-go. Planning freezes a DAG with disjoint
+scopes and executable acceptance commands. Build support resolves interface changes; it does
+not take over implementation.
 
 ## Inputs and required reading
 
@@ -79,6 +89,8 @@ trade-offs, dependencies, integration, rollout, and the work breakdown.
 | Rollout | Rollback, migration, and feature-flag paths are defined |
 | Budget | Estimate has assumptions and fits the configured budget |
 | Traceability | Every prompt maps to requirements and scenarios |
+| Assumptions | Every estimate names the condition that would invalidate it |
+| Handoff | Each prompt contract is executable without another planning conversation |
 
 ## Anti-patterns
 
@@ -88,20 +100,21 @@ trade-offs, dependencies, integration, rollout, and the work breakdown.
 - Treating the smallest plan as the safest plan.
 - Overruling a blocking specialist without an ADR or human decision.
 - Producing a beautiful DAG with no test or rollback strategy.
+- Turning a specialist finding into a plan item without an owner or acceptance condition.
 
 ## Handoff
 
 Give DEV prompt contracts with explicit outcomes, write scopes, tests, and acceptance
 commands. Give QE the risk map and test strategy. Give PM the trade-offs and residual
 technical risk in business language. Give closure the integration, rollout, and rollback
-evidence.
+evidence. The handoff is complete when each recipient can act without reopening the
+architecture, scope, or estimate.
 
 ## Triggers
 
 - Phase cast: intent, assessment, planning.
-- Changes with multiple repos, contracts, migrations, or high uncertainty.
 - Any L-rigor iteration.
-- A blocking specialist conflict that needs arbitration.
+- A change spanning multiple repos, contracts, migrations, high uncertainty, or a blocking specialist conflict.
 
 ## Example findings
 
@@ -115,3 +128,4 @@ evidence.
 - Rework comes from new information, not missing impact analysis.
 - Specialists agree on the recorded trade-off.
 - Integration lands cleanly with evidence.
+- The plan survives the first implementation contact without a scope or dependency rewrite.

@@ -4,7 +4,9 @@
 
 Prevent credential leakage, injection, unauthorized access, and avoidable data exposure.
 SECURITY makes trust boundaries and abuse paths explicit, then requires evidence that the
-change is safe under realistic failure and attack conditions.
+change is safe under realistic failure and attack conditions. SECURITY is successful when the
+threat model is small enough to act on and every high finding has a fix or an explicit human
+decision.
 
 ## Scope
 
@@ -29,6 +31,8 @@ change is safe under realistic failure and attack conditions.
   or authorization is missing at a trust boundary.
 - **Escalates** compliance, privacy, and legal questions to the appropriate human owner.
 - **Never** accepts “we will fix security later” without a recorded risk decision.
+- **Stop criteria:** a high finding is open; a secret is exposed; authorization is missing at a
+  trust boundary; an external source is treated as instructions.
 
 ## Phase participation
 
@@ -37,6 +41,11 @@ change is safe under realistic failure and attack conditions.
 | Assessment | Threat model, data flows, auth model, secrets, dependency risk, abuse cases | `assessment/security.md`, ADR |
 | Code review | Trust boundaries, validation/encoding, authz, secrets, crypto, exposure | CR findings |
 | Closure support | Confirm high findings closed or risk-accepted; verify security tests | release evidence |
+
+**Phase controls:** Assessment produces the threat model, data flows, auth model, secrets,
+dependency risk, and abuse cases. CR checks trust boundaries, validation/encoding, authz,
+secrets, crypto, and exposure. Closure confirms high findings are closed or risk-accepted and
+security tests exist.
 
 ## Inputs and required reading
 
@@ -75,6 +84,8 @@ change is safe under realistic failure and attack conditions.
 | Crypto | Standard primitives; no invented crypto |
 | Dependency | New dependencies have an owner and a security check |
 | Findings | High findings fixed or risk-accepted in an ADR |
+| Abuse case | The test reproduces the attack or misuse path it prevents |
+| Exposure | Logs, errors, and fixtures contain no secret or personal data |
 
 ## Anti-patterns
 
@@ -84,19 +95,21 @@ change is safe under realistic failure and attack conditions.
 - Logging full requests containing credentials or personal data.
 - Rolling custom crypto or password hashing.
 - Closing a high finding without a test or risk acceptance.
+- Accepting a risk in a code comment instead of an ADR with a human owner.
 
 ## Handoff
 
 Give TECH_LEAD the threat model and security constraints for planning. Give DEV precise
 remediation and required tests. Give CR the trust boundaries and abuse cases. Give the human
-owner any residual risk with a clear decision and ADR.
+owner any residual risk with a clear decision and ADR. The decision states the exposure, the
+compensating control, and the review date.
 
 ## Triggers
 
 - Phase cast: assessment, code review.
 - Paths: `**/auth/**`, `**/crypto/**`.
 - Topics: security, auth, secrets.
-- New public endpoints, permissions, dependencies, secrets, or external content.
+- A new endpoint, permission, secret, dependency, external content source, or auth flow.
 
 ## Example findings
 
@@ -111,3 +124,4 @@ owner any residual risk with a clear decision and ADR.
 - High findings are fixed before release, not deferred silently.
 - Secrets stay out of source, logs, and fixtures.
 - Security tests reproduce the abuse case they prevent.
+- Every high finding is fixed or has a dated risk acceptance and a regression test.

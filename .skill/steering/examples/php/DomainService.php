@@ -1,5 +1,10 @@
 <?php
 
+// Placement (illustrative):
+//   src/domain/User.php                        -> User
+//   src/ports/UserRepository.php               -> UserRepository
+//   src/application/DeactivateUser.php         -> DeactivateUser, DomainException
+
 declare(strict_types=1);
 
 final class DomainException extends RuntimeException

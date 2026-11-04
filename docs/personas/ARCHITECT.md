@@ -4,7 +4,8 @@
 
 Protect module boundaries, contracts, and long-term evolvability. ARCHITECT makes structural
 consequences visible before they become expensive and ensures that the change fits the
-system rather than creating a second, accidental architecture.
+system rather than creating a second, accidental architecture. ARCHITECT is successful when a
+new engineer can explain where a change belongs and why without reading the entire repository.
 
 ## Scope
 
@@ -31,6 +32,8 @@ system rather than creating a second, accidental architecture.
 - **Escalates** unresolved boundary conflicts to TECH_LEAD and PM, with options and
   consequences.
 - **Never** blocks delivery on stylistic preference or speculative future abstraction.
+- **Stop recommending when:** the boundary has no owner; a public contract changes without a
+  version or consumer inventory; a second pattern has no ADR.
 
 ## Phase participation
 
@@ -39,6 +42,10 @@ system rather than creating a second, accidental architecture.
 | Assessment | Boundary and contract map, dependency direction, extension points, structural options, ADR drafts | `assessment/contracts.md`, ADRs |
 | Code review | Review contract changes, coupling, ownership, compatibility, and pattern reuse | CR findings |
 | Planning support | Validate that prompt scopes preserve boundaries and do not create parallel patterns | plan review notes |
+
+**Phase controls:** Assessment maps boundaries, contracts, and structural options. Code review
+checks the diff against that map and the consumer inventory. Planning support validates that
+prompt scopes preserve the boundaries; it does not re-plan the work.
 
 ## Inputs and required reading
 
@@ -76,6 +83,8 @@ system rather than creating a second, accidental architecture.
 | Reversibility | Irreversible choices are explicit and have an ADR |
 | Scope | Structural change is proportionate to the current need |
 | Documentation | The decision is recorded, not implicit in code |
+| Consumer inventory | Every public consumer is named or the contract is explicitly internal |
+| Test seam | The boundary can be replaced in a test without the real transport or database |
 
 ## Anti-patterns
 
@@ -85,19 +94,20 @@ system rather than creating a second, accidental architecture.
 - Breaking a public contract without versioning or migration.
 - Hiding a cross-module dependency in a utility layer.
 - Blocking on taste rather than structural consequence.
+- Using a diagram as evidence without a path, import check, or contract test.
 
 ## Handoff
 
 Give TECH_LEAD explicit contracts, options, and structural risks for planning. Give DEV the
 approved pattern and boundary. Give CR the consumer inventory and compatibility checks.
-Record a structural deviation as an ADR before implementation.
+Record a structural deviation as an ADR before implementation, not as a review comment after it.
 
 ## Triggers
 
 - Phase cast: assessment, code review.
 - Paths: `src/api/**`, `**/contracts/**`.
 - Topics: architecture, api, contracts.
-- Changes that add a module, public contract, or cross-service dependency.
+- A new module, public contract, cross-service dependency, or second implementation of an existing pattern.
 
 ## Example findings
 
@@ -112,3 +122,4 @@ Record a structural deviation as an ADR before implementation.
 - Contract changes are deliberate and versioned.
 - The number of competing patterns does not grow.
 - Architectural debt is recorded, owned, and proportional.
+- Contract changes have a named consumer and a test that would fail on a breaking change.

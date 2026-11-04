@@ -1,3 +1,8 @@
+# Placement (illustrative):
+#   src/domain/user.py                         -> User
+#   src/ports/user_repository.py               -> UserRepository
+#   src/application/deactivate_user.py         -> DeactivateUser
+
 from dataclasses import dataclass, replace
 from typing import Protocol
 

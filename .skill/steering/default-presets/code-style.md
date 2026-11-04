@@ -19,50 +19,58 @@ for Python; PHP-CS-Fixer and PHPStan for PHP; rustfmt and clippy for Rust; Spotl
 Checkstyle, and Error Prone for Java; RuboCop and Sorbet for Ruby; and SonarQube for any
 language it supports. This rule governs the evidence, not the vendor or language.
 
+# Why
+
+Manual style debate hides real defects and slows review. A declared gate makes the baseline
+reproducible, keeps diffs focused on behaviour, and prevents a green test suite from masking
+broken typing or static analysis. The comment and memory rules keep durable history out of code
+while preserving the one anchor that links a unit to its decision record.
+
 # Comments and memory
 
-Source comments carry only the context that must stay beside the code. Durable history stays in memory.
+The constitution defines the contract; this rule makes it blocking at the gate.
 
-- An inline comment is optional. When present, it must explain *why* the code exists, why this
-  choice is safe, or which non-obvious invariant it protects. It must not restate *what* the code
-  already says.
-- Keep a behaviour comment short and under the project limit (default 500 characters). Omit it
-  when the code is self-evident.
-- Do not use comments for changelogs, dates, authors, prompt or agent IDs, copied history,
-  commented-out code, or review notes. Those belong in the docblock and manifest.
-- A significant unit gets exactly one anchor:
-  `ORCHID-MEM: <uuidv7> — <short behaviour description>`. The anchor is the **only**
-  memory/history reference in code.
-- The linked UUID docblock carries `Behavior`, `Why`, `Invariants`, `Failure modes`, `History`,
-  and `Tests`. `History` names the relevant ADR, specification, requirement, or scenario.
-- Generated code must never invent or copy a UUID. Mint one with `orchid-sdd new-uuid`, record
-  the `CodeUnit`, write the matching docblock, and run `orchid-sdd lint`.
-- Tests and private one-liners do not get anchors; tests are traced by their test IDs.
+- An inline comment must not restate *what* the code already says. It explains why the code
+  exists, why the choice is safe, or which non-obvious invariant it protects.
+- A significant unit gets exactly one `ORCHID-MEM: <uuidv7> — <short behaviour description>`
+  anchor and one linked UUID docblock. The docblock `History` names the relevant ADR,
+  specification, requirement, or scenario.
+- Never use comments for changelogs, dates, authors, prompt IDs, copied history, commented-out
+  code, or review notes. Those belong in the docblock and manifest.
+- Mint a UUID with `orchid-sdd new-uuid`, record the `CodeUnit`, write the docblock, and run
+  `orchid-sdd lint`. Tests and private one-liners do not get anchors.
 
 # Checks
 
 - The repository declares at least one style or static-analysis gate for each active language.
-- The gate runs on the changed files, not only on an unchanged baseline.
-- New suppressions, disables, `nolint` markers, or `NOSONAR` markers have a reason and an owner.
+- The gate runs on changed files, not only an unchanged baseline.
+- New suppressions, disables, `nolint`, or `NOSONAR` markers have a reason and an owner.
 - Formatting is automated; reviewers do not request manual whitespace changes.
 - The change does not weaken an existing rule to make the build pass.
 - A green test suite does not substitute for a failing style gate.
-- The rule does not assume a specific language, framework, package manager, or tool vendor.
 - Every generated comment explains why or an invariant, not what the code does.
-- Significant units have one anchor with a non-empty behaviour description and a linked docblock.
-- Inline comments contain no history log, and the docblock `History` references resolve.
+- Significant units have one anchor with a non-empty description and a linked docblock.
+- Inline comments contain no history log, and docblock `History` references resolve.
 
 # Evidence
 
-- Discovery: record the commands, baseline, existing comment debt, and any violations that affect scope.
-- Assessment: state whether the change introduces a new anchor, docblock, suppression, or migration.
-- Build: attach the exact command, result, anchor, and docblock path to the prompt report.
-- Code review: confirm the gate passed, comments stay minimal, and new suppressions are justified.
-- Logic review: confirm docblock history and delivered behaviour still agree.
+- Discovery: commands, baseline, existing comment debt, and violations that affect scope.
+- Assessment: whether the change adds an anchor, docblock, suppression, or migration.
+- Build: exact command, result, anchor, and docblock path in the prompt report.
+- Code review: gate passed, comments minimal, and new suppressions justified.
+- Logic review: docblock history and delivered behaviour still agree.
 
 # Exceptions
 
 Changing a lint rule is a reviewed change. It requires an ADR when it affects the whole
-repository or weakens a blocking gate. A local suppression is not an exception; it is a
-finding with a reason and an owner. Missing history is never an exception: record it in the
-docblock and manifest before claiming the prompt is done.
+repository or weakens a blocking gate. A local suppression is not an exception; it is a finding
+with a reason and an owner. Missing history is never an exception: record it in the docblock and
+manifest before claiming the prompt is done.
+
+# Example fit
+
+The shipped examples show shape, not a memory template: `../examples/typescript/domain-service.ts`
+has a concise why comment and a named contract, and `../examples/typescript/hexagonal-port.ts`
+keeps the port small. They are illustrative units, not production code: do not copy their
+missing anchor into a real unit. When a project language example exists, its formatting and
+comment style are binding.

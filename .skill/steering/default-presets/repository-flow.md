@@ -24,6 +24,12 @@ preset is authoritative for the concrete branch flow; this core rule checks that
 workflow and the actual commands agree. A project selecting XP mainline must also update its
 execution and release configuration and record the decision in an ADR.
 
+# Why
+
+An undeclared branch flow produces unreviewed merges, orphaned worktrees, and a default branch
+that is no longer releasable. Naming the flow and its merge target before work starts makes
+review and rollback predictable; the repository preset supplies the concrete branch names.
+
 # Checks
 
 - The default branch is named and protected by policy.
@@ -43,17 +49,22 @@ execution and release configuration and record the decision in an ADR.
 
 # Evidence
 
-- Discovery: record the workflow, feature-branch decision, and base branch in
-  `discovery/steering.md`.
-- Assessment: note branch/release impact and rollback strategy.
-- Build: branch names, worktree path, commits, merge target, and branch deletion are visible
-  in the prompt report.
-- Code review: review the integration diff, not the implementer’s local branch.
-- Logic review: confirm the delivered change is on the expected branch; no prompt branch,
-  worktree, or stray merge remains.
+- Discovery: the workflow, feature-branch decision, and base branch in `discovery/steering.md`.
+- Assessment: branch/release impact and rollback strategy.
+- Build: branch names, worktree path, commits, merge target, and branch deletion in the prompt report.
+- Code review: the integration diff, not the implementer’s local branch.
+- Logic review: the delivered change is on the expected branch; no prompt branch, worktree, or
+  stray merge remains.
 
 # Exceptions
 
 An exception to the branch or review flow requires an ADR or a recorded risk acceptance. A
 direct push to main is never implicit. If the selected workflow permits it, the evidence must
 still show tests and review.
+
+# Example fit
+
+No standalone branch example ships. The concrete fit is the selected repository preset:
+`repository-trunk-based`, `repository-gitflow`, or `repository-xp-mainline`. Cite its branch
+names and the actual commands in `discovery/steering.md`; `repository-flow` checks that the
+preset and the commands agree.

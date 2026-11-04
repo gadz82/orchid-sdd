@@ -1167,7 +1167,7 @@ The nine core defaults are:
 | `solid-principles` | architecture | discovery → logic review | SRP, OCP, LSP, ISP, and DIP applied pragmatically |
 | `dependency-inversion-container` | architecture | discovery → logic review | Explicit composition roots and optional DI containers |
 | `code-style` | code_style | discovery, assessment, build, code review, logic review | Any language’s linter, formatter, type checker, and static analysis |
-| `code-examples` | example | discovery → logic review | Small, current snippets in the project’s language |
+| `code-examples` | example | discovery → logic review | Small, current snippets; project examples are binding after migration approval |
 | `repository-flow` | repository | discovery → logic review | Branch, review, merge, and release flow |
 | `saga-pattern` | architecture | discovery → logic review | Distributed steps, compensation, idempotency, and recovery |
 | `discovery-steering` | process | discovery | Turns constraints into requirements and acceptance evidence |
@@ -1175,6 +1175,11 @@ The nine core defaults are:
 
 The shipped examples cover TypeScript, Go, Python, PHP, Rust, Java, and Ruby under
 `.skill/steering/examples/`; the `code-examples` rule lists all of them.
+
+During migration, the agent proposes project-specific examples for every significant language
+in the codebase, waits for explicit approval, then writes them under
+`.orchid/steering/examples/` and creates a blocking `.orchid/steering/code-examples.md` override.
+Build and code review must follow those examples; a deviation requires an ADR.
 
 Optional presets live in `.skill/steering/available-presets/`; core defaults live in `.skill/steering/default-presets/`.
 
@@ -1344,7 +1349,17 @@ backup remains the rollback copy. The plan instructs the agent to:
 1. inventory ADRs/specs/plans/prompts/progress;
 2. seed `Decision`/`Requirement`/`Scenario` nodes with `--scope project`;
 3. reconstruct `CodeUnit` nodes and anchors from Git history/code;
-4. validate with `index`, `lint`, `doctor`, then `migrate finalize`.
+4. analyze the existing code for every significant language, propose project code-style examples
+   in `.orchid/migration/CODE-EXAMPLES-PROPOSAL.md`, and wait for explicit approval before
+   writing anything under `.orchid/steering/examples/`;
+5. after approval, create the blocking `.orchid/steering/code-examples.md` override and verify
+   it with `doctor` and `steering context --phase build`; a refusal is recorded and leaves the
+   default rule unchanged;
+6. validate with `index`, `lint`, `doctor`, then `migrate finalize`.
+
+The proposed examples must cover every significant language in the project, not only the most
+common one. They are never generated before approval. If the user refuses, the proposal records
+the decision and the default `code-examples` rule remains unchanged.
 
 `finalize` moves the project to `phase: ready`; the next `orchid-sdd start` is the first
 real iteration.

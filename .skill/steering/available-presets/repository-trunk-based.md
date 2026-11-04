@@ -13,6 +13,23 @@ Use trunk-based development. Work in short-lived branches, integrate small chang
 and keep the default branch releasable. Long-lived feature branches are a smell; use feature
 flags or incremental delivery instead.
 
+# When to use
+
+- The team integrates continuously and releases from the trunk.
+- Changes can be split into small, independently reviewable batches.
+- The default branch can stay releasable behind tests and feature flags.
+
+# Conflicts
+
+- Do not enable with Git-flow or XP mainline presets. Long-lived release branches or direct
+  mainline integration contradict the trunk-based flow. The active repository preset overrides
+  the core `repository-flow` default; choose one.
+
+# Adds to the defaults
+
+- Default `repository-flow` only requires a declared flow; this preset adds short-lived branch
+  limits, a protected releasable trunk, and feature-flag ownership with a removal date.
+
 # Checks
 
 - Branches are short-lived and scoped to one reviewable change.
@@ -24,4 +41,4 @@ flags or incremental delivery instead.
 # Evidence
 
 Record branch names, integration commits, and the release decision in the prompt and closure
-artifacts.
+artifacts. Cite the branch lifetime and the flag removal date in `discovery/steering.md`.

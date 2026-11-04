@@ -3,7 +3,7 @@ id: code-examples
 title: Code examples are executable contracts
 summary: Examples are small, current, runnable illustrations of the desired style and boundaries.
 kind: example
-authority: advisory
+authority: blocking
 phases: [discovery, assessment, planning, build, code_review, logic_review]
 tags: [examples, style, snippets, tests, cross-language]
 examples:
@@ -42,31 +42,44 @@ copy-paste inventory, and they are not a substitute for the constitution. The sh
 cover TypeScript, Go, Python, PHP, Rust, Java, and Ruby; use the closest one and adapt its
 idioms. Every example must:
 
-- be small enough to read in one screen;
-- compile or be explicitly labelled as pseudocode;
-- show the boundary, the error path, and the test seam;
-- use the project’s real names and types where an equivalent exists;
+- be small enough to read in one screen and compile, or be explicitly labelled as pseudocode;
+- show the boundary, the error path, the test seam, and the project’s real names;
 - remain current when the rule, API, or pattern changes.
 
-Prefer one complete example over many fragments. Put examples next to the rule and link them
-from the discovery or planning artifact that applies them.
+Prefer one complete example over many fragments, and link it from the discovery or planning artifact.
+Preset-specific snippets under `examples/<language>/presets/` and style exemplars follow the same contract.
+
+Project-specific examples live under `.orchid/steering/examples/` and are linked by a project
+`code-examples` override. When present, they are binding: Build and code review must follow the
+example for the language, and a deviation requires an ADR. During migration, the agent proposes
+examples for every significant language and writes them only after explicit human approval.
+
+# Why
+
+A stale or decorative example teaches a shape that no longer compiles or matches the contract.
+Because this rule is blocking, an approved project example is the reviewable reference, and a
+silent deviation is a finding.
 
 # Checks
 
-- Does the example demonstrate the rule rather than merely restating it?
-- Does it show failure handling and not only the happy path?
-- Is it consistent with the current public contracts?
-- Is the example path referenced by the rule or the phase artifact?
-- Would a reviewer know which parts are illustrative and which are mandatory?
+- The example demonstrates the rule rather than restating it.
+- It shows failure handling, not only the happy path.
+- The change follows the project-specific example for its language; every deviation has an ADR.
 
 # Evidence
 
-- Discovery: record which examples inform the requirement or acceptance criteria.
-- Planning: cite examples in prompt constraints.
-- Build and code review: compare the change with the example, not by visual similarity alone.
-- Logic review: verify that examples still describe the delivered behaviour.
+- Discovery: which examples inform the requirement or acceptance criteria.
+- Planning and Build: examples cited in prompt constraints and the project example applied.
+- Code review: comparison against the project example, not visual similarity alone.
+- Logic review: examples still describe the delivered behaviour.
 
 # Exceptions
 
-An example may be intentionally incomplete when it is labelled as a sketch. It must not be used
-as positive evidence for a production change until it is complete.
+An example may be incomplete only when labelled as a sketch, never as positive evidence; a
+blocking deviation needs a human-approved ADR.
+
+# Example fit
+
+The shipped set is `../examples/typescript/domain-service.ts` and `hexagonal-port.ts` plus the
+Go, Python, PHP, Rust, Java, and Ruby equivalents; `domain-service.test.ts` shows the test seam.
+A project override's language example is the binding fit; the shipped example is the fallback.

@@ -49,7 +49,10 @@ containers, cross-language style gates and comment/memory discipline, examples, 
 flow, and SAGA coordination. Core rules live in `default-presets/`; optional rules live in
 `available-presets/`, including hexagonal, onion, clean, DDD, CQRS, and event-driven
 architecture, language-specific style gates, and repository workflows. Examples live under
-`examples/` for TypeScript, Go, Python, PHP, Rust, Java, and Ruby.
+`examples/` for TypeScript, Go, Python, PHP, Rust, Java, and Ruby. Preset-specific snippets live
+under `examples/<language>/presets/<preset-id>/` and are declared in the preset’s `examples`
+front matter; language style exemplars live at `examples/<language>/style-example.*`. Each
+preset snippet carries an illustrative placement header mapping its components to files.
 
 Enable only the architecture and repository patterns the project has actually chosen; several
 code-style presets may be combined for a multi-language repository. Enabling competing

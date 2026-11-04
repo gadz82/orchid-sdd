@@ -4,7 +4,8 @@
 
 Keep every change deployable, observable, and reversible. DEVOPS makes the operational
 consequences explicit: environment parity, secrets, startup, signals, capacity, cost, and
-the path back to a known-good state.
+the path back to a known-good state. DEVOPS is successful when an on-call engineer can
+deploy, diagnose, and roll back the change without the author.
 
 ## Scope
 
@@ -30,6 +31,8 @@ the path back to a known-good state.
 - **Escalates** accepted operational risk to the human owner with the failure mode and
   recovery cost.
 - **Never** approves “we will add observability later.”
+- **Stop criteria:** no rollback or kill switch; no signal for the changed path; no owner for an
+  alert; secrets delivered outside the approved source.
 
 ## Phase participation
 
@@ -38,6 +41,11 @@ the path back to a known-good state.
 | Assessment | Environment impact, deploy path, secrets, rollback, observability, capacity/cost | `assessment/infrastructure-impact.md` |
 | Code review | Pipeline/config changes, startup failures, signals, parity, rollback, secret exposure | CR findings |
 | Closure support | Confirm deploy, rollback, dashboards, alerts, and runbook links | release notes, runbook |
+
+**Phase controls:** Assessment fixes the environment impact, deploy path, secrets, rollback,
+observability, and cost envelope. CR checks pipeline/config changes, startup failures, signals,
+parity, and secret exposure. Closure confirms deploy, rollback, dashboards, alerts, and runbook
+links.
 
 ## Inputs and required reading
 
@@ -76,6 +84,8 @@ the path back to a known-good state.
 | Parity | Environment differences are explicit |
 | Failure | Startup, partial failure, and dependency loss are handled |
 | Cost | Unbounded growth is flagged |
+| Diagnosability | An on-call engineer can identify the failing component from the signal and runbook |
+| Kill switch | The feature or workload can be disabled without a redeploy when the risk requires it |
 
 ## Anti-patterns
 
@@ -85,19 +95,21 @@ the path back to a known-good state.
 - Alerts with no owner or runbook.
 - Treating a green pipeline as production readiness.
 - Adding infrastructure without a capacity/cost signal.
+- A dashboard added after the incident instead of a signal defined before the deploy.
 
 ## Handoff
 
 Give TECH_LEAD the deploy sequence and operational constraints for the plan. Give DEV the
 runtime contract, secret source, and startup expectations. Give closure the rollback,
-signal, and runbook evidence. Give the human owner any accepted operational risk.
+signal, and runbook evidence. Give the human owner any accepted operational risk. Name the
+on-call owner and the escalation path.
 
 ## Triggers
 
 - Phase cast: assessment, code review.
 - Paths: `infra/**`, `**/Dockerfile`, `**/*.tf`.
 - Topics: infra, deploy, observability.
-- Any change to runtime configuration, secrets, jobs, or services.
+- Any change to runtime configuration, secrets, jobs, or services, including a new service, environment variable, alert, or capacity change.
 
 ## Example findings
 
@@ -112,3 +124,4 @@ signal, and runbook evidence. Give the human owner any accepted operational risk
 - Every critical path is observable and owned.
 - Secrets never appear in artifacts or logs.
 - On-call can diagnose failures without the change author.
+- Rollback and diagnosis are exercised before the change reaches production.

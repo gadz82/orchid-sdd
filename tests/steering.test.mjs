@@ -232,6 +232,7 @@ test("code-examples provides snippets for every supported language", () => {
   const show = cli(root, "steering", "show", "code-examples", "--json");
   assert.equal(show.code, 0, show.all);
   const rule = JSON.parse(show.out);
+  assert.equal(rule.authority, "blocking");
   const languages = [...new Set(rule.examples.map((example) => example.language))].sort();
   assert.deepEqual(languages, ["go", "java", "php", "python", "ruby", "rust", "typescript"]);
   for (const example of rule.examples) {

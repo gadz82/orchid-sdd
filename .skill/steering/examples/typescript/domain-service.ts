@@ -1,3 +1,8 @@
+// Placement (illustrative):
+//   src/domain/user.ts                         -> User
+//   src/ports/user-repository.ts               -> UserRepository
+//   src/application/deactivate-user.ts         -> DeactivateUser
+
 import type { User, UserRepository } from "./hexagonal-port";
 
 /**

@@ -221,7 +221,7 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 - `type: build | test | spike`; spike prompts carry `timebox` and a findings deliverable.
 - Dependencies are explicit; write scopes are disjoint within a wave.
 - Every prompt cites requirements/scenarios, memory refs, constitution sections, active steering
-  rule IDs, and an executable acceptance command.
+  rule IDs, applicable project code examples, and an executable acceptance command.
 - Prompt constraints keep comments why-only and put history in the docblock.
 - Docblock ownership is derived from `scope.write`; do not list docblock files.
 - Check the cost estimate against `budgets`; surface it at G4.
@@ -233,6 +233,8 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
   `orchid/<iteration>/<prompt-id>` per prompt; never reuse a prompt branch.
 - Run `orchid-sdd route --phase build --prompt <prompt-id>` before execution and alert the user
   on `unknown` or `mismatch`.
+- Read `orchid-sdd steering context --phase build`; follow the project `code-examples` rule for
+  the language, cite it in the prompt report, and require an ADR for any deviation.
 - Record the prompt with `orchid-sdd prompt start <prompt-id> --step implement`; advance safe
   steps with `prompt step`. Finish with `prompt complete|fail|waive` only after tests, CR,
   merge, and branch cleanup.
@@ -497,10 +499,16 @@ never run `setup` inside a repo.
 4. Execute the migration prompts: inventory ADRs/specs/plans/prompts/progress, seed
    `Decision`/`Requirement`/`Scenario` nodes with `--scope project`, reconstruct
    `CodeUnit` nodes from Git/file history, add anchors/docblocks.
-5. `orchid-sdd index`, `lint`, `doctor`, then `migrate finalize` → `phase: ready`.
+5. Propose project code-style examples for every significant language found by `migrate scan`
+   (`.orchid/migration/CODE-EXAMPLES-PROPOSAL.md`). Wait for explicit human approval before
+   writing anything under `.orchid/steering/examples/`. After approval, create the blocking
+   `.orchid/steering/code-examples.md` override and run `doctor` plus
+   `steering context --phase build`.
+6. `orchid-sdd index`, `lint`, `doctor`, then `migrate finalize` → `phase: ready`.
 
 Rules: evidence over invention; one fact per node; preserve the backup; move legacy material
-into `input/legacy/` only after the backup is verified; never delete the backup.
+into `input/legacy/` only after the backup is verified; never delete the backup. Never create
+project code-style examples without explicit approval.
 
 # Hard rules
 
@@ -516,3 +524,4 @@ into `input/legacy/` only after the backup is verified; never delete the backup.
 10. Never delete migration backups; restore from `BACKUP.json` if needed.
 11. Never pass G2 or G6 with an unresolved blocking steering rule; cite evidence or record an ADR.
 12. Never silently continue after a model/agent mismatch; notify the user and let them decide.
+13. Never generate project code-style examples during migration before explicit human approval.

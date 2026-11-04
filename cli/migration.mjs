@@ -22,6 +22,27 @@ const CODE_EXTS = [
   ".js", ".mjs", ".cjs", ".ts", ".tsx", ".jsx", ".py", ".go", ".rs", ".java",
   ".kt", ".rb", ".php", ".cs", ".swift", ".scala", ".sql", ".sh", ".bash",
 ];
+const LANGUAGE_BY_EXT = {
+  ".js": "javascript",
+  ".mjs": "javascript",
+  ".cjs": "javascript",
+  ".jsx": "javascript",
+  ".ts": "typescript",
+  ".tsx": "typescript",
+  ".py": "python",
+  ".go": "go",
+  ".rs": "rust",
+  ".java": "java",
+  ".kt": "kotlin",
+  ".rb": "ruby",
+  ".php": "php",
+  ".cs": "csharp",
+  ".swift": "swift",
+  ".scala": "scala",
+  ".sql": "sql",
+  ".sh": "bash",
+  ".bash": "bash",
+};
 const EXCLUDES = new Set([
   ".git", "node_modules", ".venv", "venv", ".next", ".pytest_cache", ".ruff_cache",
   "dist", "build", "target", "vendor", "coverage", ".knowledge", ".orchid",
@@ -88,6 +109,25 @@ function languageCounts(root) {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 15),
   );
+}
+
+function languageSummary(root) {
+  const languages = {};
+  walk(root, (file) => {
+    const ext = path.extname(file).toLowerCase();
+    const language = LANGUAGE_BY_EXT[ext];
+    if (!language) return;
+    if (!languages[language]) languages[language] = { files: 0, extensions: new Set() };
+    languages[language].files += 1;
+    languages[language].extensions.add(ext);
+  });
+  return Object.entries(languages)
+    .map(([language, value]) => ({
+      language,
+      files: value.files,
+      extensions: [...value.extensions].sort(),
+    }))
+    .sort((a, b) => b.files - a.files || a.language.localeCompare(b.language));
 }
 
 function repoInventory(root, skillRoot) {
@@ -177,6 +217,7 @@ export function scanProject(root, skillRoot) {
     },
     rootGit: gitInfo(root),
     languages: languageCounts(root),
+    languagesByName: languageSummary(root),
     suggested: {
       workspace: repos.length > 0,
       profile: repos.length > 0 ? "monorepo" : detectProfile(root),
@@ -400,8 +441,11 @@ ${repoLines}
 
 ## Languages
 
-${Object.entries(scan.languages)
-  .map(([ext, count]) => `- ${ext}: ${count}`)
+${(scan.languagesByName || [])
+  .map(
+    (entry) =>
+      `- ${entry.language}: ${entry.files} files (${entry.extensions.join(", ")})`,
+  )
   .join("\n") || "- —"}
 
 ## Suggested migration
@@ -498,7 +542,25 @@ For each repo:
 Do not anchor trivia. Use the anchor policy: public behaviour, entry points, traced
 symbols, and any symbol with a docblock.
 
-## Stage 4 — Reorganize legacy knowledge safely
+## Stage 4 — Propose and approve project code-style examples
+
+Analyze the current code in every repository for the languages reported in
+\`scan.json.languagesByName\`. Write \`.orchid/migration/CODE-EXAMPLES-PROPOSAL.md\` with one to
+three small examples per significant language: a production boundary, an error path, and a
+test pattern. Mirror the existing naming, error handling, dependency injection, logging,
+formatting, and test seams; do not invent a new style.
+
+Do **not** write the final examples or modify steering yet. Ask the human:
+
+> Approve these code-style examples?
+
+Wait for an explicit answer and record it in the proposal. After approval, write the examples
+under \`.orchid/steering/examples/<language>/\` and create a blocking
+\`.orchid/steering/code-examples.md\` override that lists them. Run \`orchid-sdd doctor\` and
+\`orchid-sdd steering context --phase build\`; every example must resolve and be visible to the
+Build phase. If approval is refused, record why and leave the default rule unchanged.
+
+## Stage 5 — Reorganize legacy knowledge safely
 
 The CLI moved reusable legacy material into
 \`${scan.knowledge.folder}/input/legacy/\` after creating the backup. Keep the original
@@ -506,7 +568,7 @@ taxonomy recognizable (adr/, specs/, plans/, prompts/, progress/). Use those pat
 recording artifacts. The legacy originals no longer remain at the knowledge root; the
 backup is the rollback copy.
 
-## Stage 5 — Validate and finalize
+## Stage 6 — Validate and finalize
 
 \`\`\`bash
 orchid-sdd index
@@ -522,6 +584,8 @@ orchid-sdd migrate finalize
 
 - Every ADR/spec with current relevance has a memory node pointing to its artifact.
 - Every repo's significant code units have anchors, docblocks, and \`History\` references.
+- Project code-style examples were proposed for every significant language; approval or
+  refusal is recorded. If approved, the blocking \`code-examples\` override resolves.
 - \`index --check\`, \`lint\`, and \`doctor\` are clean (or documented waivers).
 - The backup exists and \`BACKUP.json\` lists every pre-migration asset.
 - No legacy asset was deleted before the backup was verified.
@@ -557,10 +621,73 @@ with a \`History\` section for significant units, then record \`CodeUnit\` nodes
 them. Do not anchor trivia. Run \`orchid-sdd lint\` and fix every error.
 
 Acceptance: anchors resolve, docblock History exists, and code units are traceable.`,
-    "04-finalize.md": `# Migration prompt 04 — Validate and finalize
+    "04-code-examples.md": `# Migration prompt 04 — Project code-style examples
+
+Analyze the current code for every significant language in
+\`.orchid/migration/scan.json\` (\`languagesByName\`). Do not limit the work to the most common
+language. Ignore generated, vendored, and fixture code.
+
+For each language, select representative production and test files and propose one to three
+examples:
+
+- a production boundary (service, handler, adapter, or domain unit);
+- an error or failure path;
+- a test that shows the project's test seam and naming.
+
+The examples must mirror the existing style: naming, error handling, dependency injection,
+logging, formatting, comments, and tests. Use the project's real names and types. Prefer
+complete, compilable snippets; label any sketch explicitly.
+
+Write \`.orchid/migration/CODE-EXAMPLES-PROPOSAL.md\` with the detected languages, source
+evidence for each proposal, proposed destination under \`.orchid/steering/examples/<language>/\`,
+and the snippet. Do **not** write the final examples or modify steering yet.
+
+Ask the human exactly:
+
+> Approve these code-style examples?
+
+Wait for an explicit answer. Record the approval or refusal, the approver, and the timestamp in
+the proposal. If a language has no suitable example, state why and ask for a waiver.
+
+After approval, write the approved examples under \`.orchid/steering/examples/<language>/\` and
+create \`.orchid/steering/code-examples.md\` with this shape:
+
+\`\`\`markdown
+---
+id: code-examples
+extends: code-examples
+title: Project code-style examples
+summary: Generated code follows the project's existing idioms.
+kind: example
+authority: blocking
+phases: [discovery, assessment, planning, build, code_review, logic_review]
+tags: [examples, style, project]
+examples:
+  - path: examples/php/DomainService.php
+    title: "PHP service boundary"
+    language: php
+---
+# Rule
+Generated code must follow these examples. A deviation requires an ADR.
+# Checks
+# Evidence
+\`\`\`
+
+List every approved example. Run \`orchid-sdd doctor\` and
+\`orchid-sdd steering context --phase build\`; every example must resolve and appear in the
+Build context.
+
+Acceptance: every significant language has an approved example or a recorded waiver; the
+project \`code-examples\` override is blocking and resolves; if the proposal was refused, the
+refusal is recorded and no examples or override were created.`,
+    "05-finalize.md": `# Migration prompt 05 — Validate and finalize
 
 Verify \`${scan.knowledge.folder}/input/legacy/\` exists and that recorded artifacts point
 to it. If it is missing, stop and report; do not delete the originals or the backup.
+
+If code-style examples were approved, verify \`.orchid/steering/code-examples.md\` and every
+listed example resolve and appear in \`orchid-sdd steering context --phase build\`. If they were
+refused, verify the proposal records the decision.
 
 Run \`orchid-sdd index\`, \`orchid-sdd lint\`, \`orchid-sdd doctor\`, then
 \`orchid-sdd migrate finalize\`. Review \`.orchid/migration/REPORT.md\`. Fix findings

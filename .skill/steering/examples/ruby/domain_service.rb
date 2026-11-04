@@ -1,5 +1,10 @@
 # frozen_string_literal: true
 
+# Placement (illustrative):
+#   lib/domain/user.rb                         -> User
+#   lib/ports/user_repository.rb               -> UserRepository
+#   lib/application/deactivate_user.rb         -> DeactivateUser
+
 User = Data.define(:id, :email, :active)
 
 class DeactivateUser

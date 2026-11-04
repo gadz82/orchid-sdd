@@ -32,6 +32,7 @@ export function agentsBlock(knowledgeFolder, constitutionFolder = ".orchid/const
 - Never edit \`${knowledgeFolder}/**\`, the manifest, or docblocks of code you do not own. Write code; propose knowledge.
 - Follow \`${constitutionFolder}/\` for how code is written here.
 - Read \`orchid-sdd steering context --phase <phase>\` before Discovery and Logic Review; apply every active rule and cite its ID.
+- Before Build, read the Build steering context and follow the project code examples for the language; a deviation requires an ADR.
 - Run \`orchid-sdd route --phase <phase>\` before work; if the current model/agent is unknown or mismatched, tell the user. Never switch automatically.
 - Track development prompts with \`orchid-sdd prompt start|step|complete\`; save a checkpoint with \`orchid-sdd handoff prepare\` before changing harness.
 - Ask before starting whether to create a feature branch and from which base; record the answer in the TRD. If not, stay on the current branch.
