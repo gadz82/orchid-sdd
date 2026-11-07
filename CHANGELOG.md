@@ -1,3 +1,15 @@
+# [1.0.0](https://github.com/gadz82/orchid-sdd/compare/v0.3.4...v1.0.0) (2026-11-07)
+
+
+* feat(skill)!: add dependency ledger and compact recall index ([707accb](https://github.com/gadz82/orchid-sdd/commit/707accb2703f2b4ae9b0937e1a2046235472d60b))
+
+
+### BREAKING CHANGES
+
+* recall.json is now generated and Git-ignored. Untrack
+it with git rm --cached and rebuild it with orchid-sdd index or recall.
+The recall index schema is version 3 with ordinal postings.
+
 ## [0.3.4](https://github.com/gadz82/orchid-sdd/compare/v0.3.3...v0.3.4) (2026-11-04)
 
 
