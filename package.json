@@ -24,7 +24,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test tests/setup.test.mjs tests/memory.test.mjs tests/lifecycle.test.mjs tests/workspace.test.mjs tests/migration.test.mjs tests/plugin.test.mjs tests/personas.test.mjs tests/skill-install.test.mjs tests/profiles.test.mjs tests/steering.test.mjs tests/models.test.mjs tests/prompt-state.test.mjs",
+    "test": "node --test tests/setup.test.mjs tests/memory.test.mjs tests/lifecycle.test.mjs tests/workspace.test.mjs tests/migration.test.mjs tests/plugin.test.mjs tests/personas.test.mjs tests/skill-install.test.mjs tests/profiles.test.mjs tests/steering.test.mjs tests/models.test.mjs tests/prompt-state.test.mjs tests/dependencies.test.mjs tests/recall-dependencies.test.mjs tests/recall-index.test.mjs tests/recall-versioning.test.mjs tests/prompt-validate.test.mjs tests/doctor-quality.test.mjs",
     "prepublishOnly": "npm test",
     "plugin:check": "node --test tests/plugin.test.mjs",
     "personas:check": "node --test tests/personas.test.mjs",

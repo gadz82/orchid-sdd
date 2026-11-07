@@ -23,6 +23,7 @@ import { steeringCommand } from "./steering.mjs";
 import { routeCommand } from "./models.mjs";
 import { promptCommand } from "./prompts.mjs";
 import { handoffCommand } from "./handoff.mjs";
+import { dependenciesCommand } from "./dependencies.mjs";
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -33,6 +34,7 @@ const VALUE_OPTIONS = new Set([
   "persona-file", "knowledge-folder", "docblocks-folder", "constitution-folder",
   "customizations-folder", "repo", "output", "scope", "agent", "dest", "phase",
   "steering-preset", "current-agent", "current-model", "step", "reason", "handoff",
+  "kind", "limit", "history", "iteration", "budget",
 ]);
 const REPEATABLE = new Set([
   "relation",
@@ -101,6 +103,7 @@ Setup and inspection
   steering list|show|context  Inspect and apply phase steering rules
   route                       Resolve the expected agent/model for a phase or prompt
   prompt list|show            Inspect prompt execution state
+  prompt validate             Validate plan/prompts contracts (--json)
   prompt start|step|complete|fail|waive  Track development-prompt execution
   handoff list|show|prepare|accept  Save or accept a portable execution handoff
 
@@ -120,6 +123,7 @@ Memory
   index [--check]             Rebuild or verify manifest and indexes
   recall <uuid|topic|question|path>   Read a compact context pack
   lint [--check]              Validate anchors, docblocks, and comment limits
+  dependencies list|check     Inspect and validate the cross-repo dependency ledger
   persona list|show <ID>      Inspect effective personas and overrides
   steering list|show <ID>     Inspect effective steering rules and overrides
   steering context            Show rules active for a phase (--phase discovery|logic_review)
@@ -149,6 +153,7 @@ route options
 prompt options
   prompt list [--json]
   prompt show P-001 [--json]
+  prompt validate [--json]
   prompt start P-001 [--step NAME]
   prompt step P-001 --step NAME
   prompt complete|fail|waive P-001 [--note TEXT] [--evidence PATH] [--json]
@@ -169,6 +174,15 @@ record options
   [--artifact path] [--code path#symbol] [--alias R-001]
   [--relation predicate:target] [--status accepted] [--iteration ID]
   [--scope project|iteration] [--repo ID]
+
+recall options
+  recall <uuid|topic|question|path|DEP-###> [--repo ID] [--hops 1|2] [--limit 1-100]
+         [--history recent|all|none] [--iteration ID] [--summary] [--budget BYTES] [--full]
+         [--include-superseded] [--json]
+
+dependencies options
+  dependencies list [--repo ID] [--status STATUS] [--kind KIND] [--json]
+  dependencies check [--json]
 
 Run \`orchid-sdd <command> --help\` for the full contract; the design is in docs/orchid-sdd-design.md.
 `;
@@ -275,8 +289,28 @@ export async function main(argv) {
         return index(root, { check: flag(args.check), json });
       case "lint":
         return lint(root, { json });
+      case "dependencies":
+        return dependenciesCommand(root, {
+          action: positional[0] || "list",
+          repo: args.repo,
+          status: args.status,
+          kind: args.kind,
+          json,
+        });
       case "recall":
-        return recall(root, { query: positional.join(" "), hops: args.hops, repo: args.repo, json });
+        return recall(root, {
+          query: positional.join(" "),
+          hops: args.hops,
+          repo: args.repo,
+          limit: args.limit,
+          json,
+          history: args.history,
+          iteration: args.iteration,
+          includeSuperseded: flag(args["include-superseded"]),
+          summary: flag(args.summary),
+          full: flag(args.full),
+          budget: args.budget,
+        });
       case "record":
         return record(root, {
           type: args.type,

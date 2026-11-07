@@ -15,9 +15,12 @@ import {
   stableStringify,
   stripVolatile,
   sortUnique,
+  tokenize,
   uuid7,
   writeJson,
+  writeJsonCompact,
 } from "./util.mjs";
+import { INDEX_REL, ledgerIndex } from "./dependencies.mjs";
 
 export function paths(root, cfg) {
   const knowledge = path.resolve(root, cfg.knowledge_folder);
@@ -44,6 +47,26 @@ export function paths(root, cfg) {
 
 export const GATES = ["G0", "G1", "G2", "G3", "G4", "G5", "G6", "G7", "G8"];
 
+// Events that change the recall index content. Gate/phase/route events do not:
+// they advance `lastEvent` but leave memory unchanged, so a memory-specific
+// revision keeps `recall` from rebuilding after a gate or phase transition.
+const MEMORY_EVENT_TYPES = new Set([
+  "node.recorded",
+  "node.updated",
+  "iteration.closed",
+  "iteration.abandoned",
+]);
+
+/** True when appending `type` changes the recall index content. */
+export function isMemoryEventType(type) {
+  return MEMORY_EVENT_TYPES.has(type);
+}
+
+/** The memory-specific revision used for recall-index freshness. */
+export function memoryRevision(state) {
+  return state.memoryEvent ?? state.lastEvent ?? null;
+}
+
 export function newState(cfg, configHash) {
   return {
     schemaVersion: 1,
@@ -62,6 +85,7 @@ export function newState(cfg, configHash) {
     currentRun: null,
     lastHandoff: null,
     lastEvent: null,
+    memoryEvent: null,
   };
 }
 
@@ -74,6 +98,7 @@ export function readState(root) {
   state.currentPrompt = state.currentPrompt || null;
   state.currentRun = state.currentRun || null;
   state.lastHandoff = state.lastHandoff || null;
+  state.memoryEvent = state.memoryEvent ?? state.lastEvent ?? null;
   return state;
 }
 
@@ -104,6 +129,7 @@ export function appendEvent(root, cfg, state, { type, subject = null, payload = 
   };
   fs.appendFileSync(file, `${JSON.stringify(event)}\n`, "utf8");
   state.lastEvent = event.eventId;
+  if (MEMORY_EVENT_TYPES.has(type)) state.memoryEvent = event.eventId;
   writeState(root, state);
   return event;
 }
@@ -158,7 +184,7 @@ function buildDependencies(plan) {
 }
 
 function push(index, key, value) {
-  if (!key) return;
+  if (key === null || key === undefined || key === "") return;
   if (!index[key]) index[key] = [];
   index[key].push(value);
 }
@@ -242,7 +268,291 @@ export function buildIndexes(nodes, events, plan) {
   };
 }
 
-export function project(root, cfg, state) {
+export const RECALL_INDEX_REL = "index/recall.json";
+export const RECALL_SCHEMA_VERSION = 3;
+
+function compactRecallNode(node, snapshot) {
+  const isProject =
+    node.scope === "project" || node.iteration === null || node.iteration === "project";
+  return {
+    id: node["@id"],
+    type: node["@type"] || null,
+    scope: isProject ? "project" : "iteration",
+    iteration: isProject ? null : node.iteration || null,
+    aliases: (node.aliases || []).slice(),
+    topics: (node.topics || []).slice(),
+    questions: (node.answers || []).slice(),
+    codeAnchor: node.codeAnchor || null,
+    description: node.description || "",
+    artifact: node.artifact || null,
+    supersededBy: null,
+    repo: node.repo || null,
+    relations: (node.relations || []).map((relation) => ({
+      predicate: relation.predicate,
+      target: relation.target,
+    })),
+    createdAt: node.createdAt || null,
+    snapshot,
+  };
+}
+
+/**
+ * Build the generated recall index from the freshly projected manifest and the
+ * archived iteration snapshots. Active manifest nodes win deduplication over
+ * historical copies; historical nodes carry a relative `snapshot` path so recall
+ * can hydrate them lazily. Maps are lowercase and deterministically sorted.
+ */
+export function buildRecallIndex(root, cfg, manifest, state, iterations) {
+  const byId = new Map();
+  for (const node of manifest.nodes || []) {
+    byId.set(node["@id"], compactRecallNode(node, null));
+  }
+
+  // Chronological rank from the event stream (start order), so "recent" reflects
+  // real creation order even when iteration names sort differently or closes land
+  // in the same second.
+  const rankByIteration = new Map();
+  let rank = 0;
+  for (const id of iterations ? iterations.keys() : []) {
+    rankByIteration.set(id, rank);
+    rank += 1;
+  }
+
+  const historyEntries = [];
+  for (const entry of manifest.history || []) {
+    if (!entry.manifest) continue;
+    const file = path.join(paths(root, cfg).knowledge, entry.manifest);
+    if (!exists(file)) continue;
+    let snapshotNodes = [];
+    try {
+      snapshotNodes = readJson(file).nodes || [];
+    } catch {
+      continue;
+    }
+    for (const node of snapshotNodes) {
+      if (!byId.has(node["@id"])) byId.set(node["@id"], compactRecallNode(node, entry.manifest));
+    }
+    historyEntries.push({
+      iteration: entry.iteration,
+      snapshot: entry.manifest,
+      rank: rankByIteration.get(entry.iteration) ?? Number.MAX_SAFE_INTEGER,
+    });
+  }
+  historyEntries.sort(
+    (a, b) => a.rank - b.rank || a.iteration.localeCompare(b.iteration),
+  );
+  const history = historyEntries.map(({ iteration, snapshot }) => ({ iteration, snapshot }));
+
+  const entries = [...byId.values()];
+
+  // supersededBy: the first node with a `supersedes` relation targeting this node.
+  const superseding = new Map();
+  for (const entry of entries) {
+    for (const relation of entry.relations || []) {
+      if (relation.predicate !== "supersedes" || !relation.target) continue;
+      const key = String(relation.target).replace(/^urn:uuid:/, "").toLowerCase();
+      if (!superseding.has(key)) superseding.set(key, entry.id);
+    }
+  }
+  for (const entry of entries) {
+    const direct = superseding.get(String(entry.id).replace(/^urn:uuid:/, "").toLowerCase());
+    const viaAlias = (entry.aliases || [])
+      .map((alias) => superseding.get(String(alias).toLowerCase()))
+      .find(Boolean);
+    entry.supersededBy = direct || viaAlias || null;
+  }
+
+  entries.sort((a, b) => {
+    const createdA = String(a.createdAt || "");
+    const createdB = String(b.createdAt || "");
+    if (createdA !== createdB) return createdA < createdB ? -1 : 1;
+    return a.id < b.id ? -1 : 1;
+  });
+
+  const terms = {};
+  const topicsIndex = {};
+  const aliasesIndex = {};
+  const questionsIndex = {};
+  const codeAnchorsIndex = {};
+  const push = (index, key, value) => {
+    if (key === null || key === undefined || key === "") return;
+    if (!index[key]) index[key] = [];
+    index[key].push(value);
+  };
+
+  // `terms` indexes alias/topic/question/code-anchor/description tokens only.
+  // The exact `@id` is not indexed: recall resolves UUIDs via `nodes` directly, and
+  // per-node UUID hex tokens would dominate the posting list and bloat the index.
+  for (const entry of entries) {
+    const text = [
+      ...(entry.aliases || []),
+      ...(entry.topics || []),
+      ...(entry.questions || []),
+      entry.codeAnchor || "",
+      entry.description || "",
+    ].join(" ");
+    for (const token of new Set(tokenize(text))) push(terms, token, entry.id);
+    for (const topic of entry.topics || []) push(topicsIndex, String(topic).toLowerCase(), entry.id);
+    for (const alias of entry.aliases || []) push(aliasesIndex, String(alias).toLowerCase(), entry.id);
+    for (const question of entry.questions || []) {
+      push(questionsIndex, String(question).toLowerCase(), entry.id);
+    }
+    if (entry.codeAnchor) push(codeAnchorsIndex, String(entry.codeAnchor).toLowerCase(), entry.id);
+  }
+
+  const aliasesIndexSorted = sortedIndex(aliasesIndex);
+
+  // Canonical reference resolution (exact id, then most-recent alias) used to build
+  // the reverse-relation map. Mirrors recall's resolveId so hop expansion is O(degree).
+  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
+  const snapshotRank = new Map();
+  history.forEach((entry, i) => snapshotRank.set(entry.snapshot, i));
+  const activeRank = history.length;
+  function pickMostRecent(ids) {
+    let best = null;
+    let bestRank = -Infinity;
+    let bestCreated = "";
+    let bestId = "";
+    for (const id of ids) {
+      const entry = entriesById.get(id);
+      if (!entry) continue;
+      const entryRank =
+        entry.snapshot === null ? activeRank : (snapshotRank.get(entry.snapshot) ?? -1);
+      const created = entry.createdAt || "";
+      if (
+        entryRank > bestRank ||
+        (entryRank === bestRank && (created > bestCreated || (created === bestCreated && id > bestId)))
+      ) {
+        best = id;
+        bestRank = entryRank;
+        bestCreated = created;
+        bestId = id;
+      }
+    }
+    return best;
+  }
+
+  const canonical = new Map();
+  for (const entry of entries) {
+    canonical.set(String(entry.id).replace(/^urn:uuid:/, "").toLowerCase(), entry.id);
+  }
+  for (const [alias, ids] of Object.entries(aliasesIndexSorted)) {
+    canonical.set(alias, pickMostRecent(ids));
+  }
+
+  const incomingRelations = {};
+  for (const entry of entries) {
+    for (const relation of entry.relations || []) {
+      const key = String(relation.target).replace(/^urn:uuid:/, "").toLowerCase();
+      const targetId = canonical.get(key) || (entriesById.has(relation.target) ? relation.target : null);
+      if (targetId) push(incomingRelations, targetId, entry.id);
+    }
+  }
+
+  // Postings store node ordinals rather than repeating 38-character UUIDs in every
+  // list. `nodes` is the ordinal table; recall expands the maps once after loading.
+  const ordinalById = new Map(entries.map((entry, ordinal) => [entry.id, ordinal]));
+  const compact = (index) => {
+    const out = {};
+    for (const [key, ids] of Object.entries(index)) {
+      out[key] = ids.map((id) => ordinalById.get(id)).filter((ordinal) => ordinal !== undefined);
+    }
+    return sortedIndex(out);
+  };
+  const incomingCompact = {};
+  for (const [targetId, sourceIds] of Object.entries(incomingRelations)) {
+    const targetOrdinal = ordinalById.get(targetId);
+    if (targetOrdinal === undefined) continue;
+    incomingCompact[targetOrdinal] = sourceIds
+      .map((id) => ordinalById.get(id))
+      .filter((ordinal) => ordinal !== undefined);
+  }
+
+  return {
+    generatedAt: nowIso(),
+    schemaVersion: RECALL_SCHEMA_VERSION,
+    activeIteration: state.activeIteration || null,
+    lastEventId: memoryRevision(state),
+    history,
+    nodes: entries,
+    terms: compact(terms),
+    topicsIndex: compact(topicsIndex),
+    aliasesIndex: compact(aliasesIndexSorted),
+    questionsIndex: compact(questionsIndex),
+    codeAnchorsIndex: compact(codeAnchorsIndex),
+    incomingRelations: sortedIndex(incomingCompact),
+  };
+}
+
+/**
+ * Expand ordinal postings from the on-disk recall index back to node ids. The
+ * generated file stays compact; callers see the same shape as before.
+ */
+export function expandRecallIndex(index) {
+  const ids = (index.nodes || []).map((entry) => entry.id);
+  const expand = (postings) => {
+    const out = {};
+    for (const [key, ordinals] of Object.entries(postings || {})) {
+      out[key] = (ordinals || []).map((ordinal) => ids[ordinal]).filter(Boolean);
+    }
+    return out;
+  };
+  const expanded = {
+    ...index,
+    terms: expand(index.terms),
+    topicsIndex: expand(index.topicsIndex),
+    aliasesIndex: expand(index.aliasesIndex),
+    questionsIndex: expand(index.questionsIndex),
+    codeAnchorsIndex: expand(index.codeAnchorsIndex),
+    incomingRelations: {},
+  };
+  for (const [ordinal, sourceOrdinals] of Object.entries(index.incomingRelations || {})) {
+    const target = ids[Number(ordinal)];
+    if (!target) continue;
+    expanded.incomingRelations[target] = (sourceOrdinals || [])
+      .map((sourceOrdinal) => ids[sourceOrdinal])
+      .filter(Boolean);
+  }
+  return expanded;
+}
+
+/**
+ * Return null when the generated index can serve the current state, otherwise a
+ * short reason. Active iteration and schema are part of freshness: recovery can
+ * change the active set without appending a memory event, and an old index must
+ * not be reused after its format changes.
+ */
+export function recallIndexProblem(index, state) {
+  if (!index || typeof index !== "object") return "missing";
+  if (index.schemaVersion !== RECALL_SCHEMA_VERSION) return "schema";
+  if ((index.activeIteration ?? null) !== (state.activeIteration ?? null)) return "iteration";
+  if ((index.lastEventId ?? null) !== memoryRevision(state)) return "revision";
+  return null;
+}
+
+/**
+ * Load the recall index, rebuilding it when it is missing or stale (its `lastEventId`
+ * no longer matches the memory-specific revision, its active iteration differs, or
+ * its schema version is unsupported). This keeps `recall` correct after a `record`
+ * without paying the full rebuild on every write, and it does not rebuild after
+ * gate/phase events that leave memory unchanged.
+ */
+export function loadRecallIndexFresh(root, cfg, state) {
+  const file = path.join(paths(root, cfg).index, "recall.json");
+  if (exists(file)) {
+    try {
+      const index = readJson(file);
+      if (!recallIndexProblem(index, state)) return expandRecallIndex(index);
+    } catch {
+      /* fall through to rebuild */
+    }
+  }
+  const { indexes } = project(root, cfg, state, { recall: true });
+  writeJsonCompact(file, indexes.recall);
+  return expandRecallIndex(indexes.recall);
+}
+
+export function project(root, cfg, state, options = {}) {
   const events = readEvents(root, cfg);
   const nodes = new Map();
   const iterations = new Map();
@@ -286,6 +596,7 @@ export function project(root, cfg, state) {
   );
   const plan = readPlan(root, cfg, active);
   const indexes = buildIndexes(manifestNodes, events, plan);
+  indexes.crossRepoDependencies = ledgerIndex(root, cfg);
   const meta = active ? iterations.get(active) || {} : {};
 
   const history = [];
@@ -353,6 +664,8 @@ export function project(root, cfg, state) {
       dependencies: "index/dependencies.json",
       timeline: "index/timeline.json",
       repos: "index/repos.json",
+      crossRepoDependencies: INDEX_REL,
+      recall: RECALL_INDEX_REL,
     },
     workspace:
       cfg.workspace && cfg.workspace.enabled
@@ -371,12 +684,16 @@ export function project(root, cfg, state) {
     nodes: manifestNodes,
   };
 
+  if (options.recall) {
+    indexes.recall = buildRecallIndex(root, cfg, manifest, state, iterations);
+  }
+
   return { manifest, indexes, events, nodes: [...nodes.values()], iterations };
 }
 
-export function writeProjection(root, cfg, state) {
+export function writeProjection(root, cfg, state, options = {}) {
   const p = paths(root, cfg);
-  const { manifest, indexes } = project(root, cfg, state);
+  const { manifest, indexes } = project(root, cfg, state, options);
   ensureDir(p.index);
   writeJson(p.manifest, manifest);
   writeJson(path.join(p.index, "topics.json"), indexes.topics);
@@ -387,6 +704,8 @@ export function writeProjection(root, cfg, state) {
   writeJson(path.join(p.index, "timeline.json"), indexes.timeline);
   writeJson(path.join(p.index, "supersession.json"), indexes.supersession);
   writeJson(path.join(p.index, "repos.json"), indexes.repos);
+  writeJson(path.join(p.index, "cross-repo-dependencies.json"), indexes.crossRepoDependencies);
+  if (options.recall) writeJsonCompact(path.join(p.index, "recall.json"), indexes.recall);
   return { manifest, indexes };
 }
 
@@ -394,7 +713,7 @@ export function checkProjection(root, cfg, state) {
   const p = paths(root, cfg);
   const drift = [];
   if (!exists(p.manifest)) return ["manifest.jsonld"];
-  const built = project(root, cfg, state);
+  const built = project(root, cfg, state, { recall: false });
   const diskManifest = readJson(p.manifest);
   if (stableStringify(stripVolatile(diskManifest)) !== stableStringify(stripVolatile(built.manifest))) {
     drift.push("manifest.jsonld");
@@ -408,14 +727,20 @@ export function checkProjection(root, cfg, state) {
     "timeline.json": built.indexes.timeline,
     "supersession.json": built.indexes.supersession,
     "repos.json": built.indexes.repos,
+    "cross-repo-dependencies.json": built.indexes.crossRepoDependencies,
   };
+  // `recall.json` is a generated, Git-ignored artifact and is deliberately not
+  // drift-checked: a missing or stale recall index is rebuilt on demand by
+  // `recall` or by `orchid-sdd index`, never treated as projection drift.
   for (const [name, value] of Object.entries(files)) {
     const file = path.join(p.index, name);
     if (!exists(file)) {
       drift.push(`index/${name}`);
       continue;
     }
-    if (stableStringify(readJson(file)) !== stableStringify(value)) drift.push(`index/${name}`);
+    if (stableStringify(stripVolatile(readJson(file))) !== stableStringify(stripVolatile(value))) {
+      drift.push(`index/${name}`);
+    }
   }
   return drift;
 }
@@ -424,6 +749,42 @@ export function loadManifest(root, cfg) {
   const file = paths(root, cfg).manifest;
   if (!exists(file)) throw new OrchidError(`${file} is missing; run \`orchid-sdd index\``);
   return readJson(file);
+}
+
+/**
+ * Load the active manifest nodes and each archived iteration snapshot's nodes,
+ * split so callers can distinguish active from historical nodes.
+ */
+export function loadManifestNodes(root, cfg) {
+  const manifest = loadManifest(root, cfg);
+  const active = manifest.nodes || [];
+  const history = [];
+  for (const entry of manifest.history || []) {
+    if (!entry.manifest) continue;
+    const file = path.join(paths(root, cfg).knowledge, entry.manifest);
+    if (exists(file)) {
+      try {
+        history.push(...(JSON.parse(fs.readFileSync(file, "utf8")).nodes || []));
+      } catch {
+        /* doctor reports unreadable history */
+      }
+    }
+  }
+  return { active, history };
+}
+
+/**
+ * Load every memory node: the active manifest plus each archived iteration
+ * snapshot referenced by `history`, deduplicated by `@id` (active manifest nodes
+ * win over historical copies). Keeps closed-iteration recall working without
+ * returning a project-scoped node twice after close.
+ */
+export function loadAllNodes(root, cfg) {
+  const { active, history } = loadManifestNodes(root, cfg);
+  const byId = new Map();
+  for (const node of active) byId.set(node["@id"], node);
+  for (const node of history) if (!byId.has(node["@id"])) byId.set(node["@id"], node);
+  return [...byId.values()];
 }
 
 export function writeIterationSnapshot(root, cfg, state, status, reason = null, workspace = null) {

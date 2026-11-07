@@ -30,6 +30,7 @@ or repository exception, and makes every waiver a decision rather than a silent 
 - Each verdict cites file paths, symbols, commands, ADR IDs, and a commit or diff reference.
 - Style gates ran on the integrated change, not only on a local branch.
 - Architecture dependencies still point inward and no new boundary was crossed.
+- Every touched cross-repo dependency row is verified or waived with current evidence.
 - The repository flow was followed and no unreviewed direct merge occurred.
 - Delivered code still matches the approved examples, or a deviation is recorded.
 - Every open finding becomes a follow-up prompt or a waived risk with an ADR.

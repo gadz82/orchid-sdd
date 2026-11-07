@@ -25,6 +25,7 @@
     "currentRun": { "type": ["string", "null"] },
     "lastHandoff": { "type": ["string", "null"] },
     "lastEvent": { "type": ["string", "null"] },
+    "memoryEvent": { "type": ["string", "null"] },
     "migration": { "type": ["object", "null"] }
   }
 }

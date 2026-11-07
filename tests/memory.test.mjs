@@ -34,6 +34,8 @@ test("record projects a node and builds the indexes", () => {
   const questions = readJson(path.join(root, ".knowledge", "index", "questions.json"));
   assert.ok(questions["How do users sign in without a password?"]);
 
+  // recall.json is a derived index: rebuild it explicitly, then verify no drift.
+  assert.equal(cli(root, "index").code, 0);
   const check = cli(root, "index", "--check");
   assert.equal(check.code, 0, check.all);
 });

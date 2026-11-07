@@ -5,6 +5,7 @@ import { PHASE_NAMES, loadConfig } from "./config.mjs";
 import {
   appendEvent,
   archiveTransients,
+  isMemoryEventType,
   listIterations,
   paths,
   readEvents,
@@ -466,6 +467,7 @@ export function resume(root, args) {
   let title = null;
   let lastClosed = null;
   let last = null;
+  let lastMemory = null;
   let prompts = {};
   let runs = {};
   let currentPrompt = null;
@@ -476,6 +478,7 @@ export function resume(root, args) {
 
   for (const event of events) {
     last = event;
+    if (isMemoryEventType(event.type)) lastMemory = event.eventId;
     const payload = event.payload || {};
     if (event.type === "iteration.started") {
       active = payload.id;
@@ -540,6 +543,7 @@ export function resume(root, args) {
   state.iterationTitle = title || state.iterationTitle;
   state.gates = gates;
   state.lastEvent = last ? last.eventId : state.lastEvent;
+  state.memoryEvent = lastMemory ?? state.memoryEvent;
 
   let acceptedHandoff = null;
   if (active && !args.noHandoff) {

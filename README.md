@@ -102,7 +102,13 @@ The agent-facing workflow is in [`SKILL.md`](SKILL.md); this is the operator run
 | Baseline memory | `orchid-sdd record --scope project --repo <id> ...` | Facts that survive iterations (migration, architecture) |
 | Link nodes | `orchid-sdd record ... --relation implements:urn:uuid:...` | Build the graph explicitly |
 | Find context | `orchid-sdd recall auth` | Resolve a topic, question, path, alias, or UUID |
+| Recall a dependency | `orchid-sdd recall DEP-001` | Resolve a ledger row and its related ADR/test nodes |
 | Filter by repo | `orchid-sdd recall auth --repo orchid` | Workspace-scoped retrieval |
+| Follow a dependency chain | `orchid-sdd recall DEP-001 --hops 2` | CR-time 2-hop expansion from a matched row |
+| Cap results | `orchid-sdd recall auth --limit 10` | Bound matches and dependency rows (1–100, default 20) |
+| Compact context pack | `orchid-sdd recall auth --summary --budget 1200` | One-line summaries, trimmed to a byte budget |
+| Full node | `orchid-sdd recall <id> --full` | Hydrate the complete node (relations, answers, artifacts) |
+| Search history | `orchid-sdd recall auth --history all` | `recent` (default, last 3) / `all` / `none` |
 | Rebuild indexes | `orchid-sdd index` | After recording/editing artifacts |
 | Verify indexes | `orchid-sdd index --check` | CI drift check |
 | Validate anchors/docs | `orchid-sdd lint` | Anchors, descriptions, docblock History, 500-char comments |
@@ -155,6 +161,7 @@ The route command never switches models or agents. It reports `match`, `mismatch
 | Complete a prompt | `orchid-sdd prompt complete P-001 --note "..."` | Mark the prompt and its run done |
 | Fail or waive | `orchid-sdd prompt fail P-001 --note "..."` / `prompt waive P-001` | Record the terminal state |
 | Inspect state | `orchid-sdd prompt list --json` / `prompt show P-001` | Reconstruct the current run |
+| Validate prompt contracts | `orchid-sdd prompt validate [--json]` | Check fields, `depends_on`, and `dependency_refs` |
 | Save a handoff | `orchid-sdd handoff prepare --reason "switch model"` | Write a portable checkpoint |
 | Inspect handoffs | `orchid-sdd handoff list --json` | Find a saved checkpoint |
 | Resume normally | `orchid-sdd resume` | Rebuild state and automatically accept the latest handoff |
@@ -180,7 +187,20 @@ harness. It does not switch anything automatically.
 | Baseline memory | `orchid-sdd record --scope project --repo <id> ...` | Cross-iteration repo knowledge |
 | Clean-tree guard | `orchid-sdd start "..."` / `--allow-dirty` | Refuse mixed work; override deliberately |
 | Freeze Git state | `orchid-sdd close --approve` | Snapshot each repo's HEAD |
+| Track cross-repo dependencies | edit `.orchid/cross-repo-dependencies.md` | Reusable ledger for CR, planning, and logic review |
+| List/filter dependencies | `orchid-sdd dependencies list [--repo ID] [--status S] [--kind K] [--json]` | Discover open or per-repo edges |
+| Validate the ledger | `orchid-sdd dependencies check [--json]` | Fail on missing columns, bad status, unknown repos |
 | Nested setup | *(refused)* | Run setup at the workspace root |
+
+Cross-repo dependencies are tracked in `.orchid/cross-repo-dependencies.md` (template:
+`.skill/templates/artifacts/cross-repo-dependencies.md`). Add a `DEP-###` row as soon as an edge is
+discovered. CR must open every row that touches a changed repo and check contract/version,
+failure mode, deployment order, and consumer/provider regression evidence. This ledger is
+separate from the prompt DAG in `.knowledge/index/dependencies.json`; its generated index is
+`.knowledge/index/cross-repo-dependencies.json` (run `orchid-sdd index` after editing).
+`dependencies list --json` and `dependencies check --json` both return a stable envelope
+`{ "ok": true, "rows": [], "errors": [], "warnings": [] }` (`ok` is `false` and `rows` is empty
+when the ledger is invalid; the exit code is 1).
 
 ### Migration
 
@@ -665,7 +685,8 @@ Migration is the deliberate exception, where legacy material is reorganized afte
 ### The memory loop
 
 ```text
-agent → `orchid-sdd record` → events/*.jsonl → manifest.jsonld + index/*.json → `recall` → agent
+agent → `orchid-sdd record` → events/*.jsonl → manifest.jsonld + core index/*.json
+       └─ `orchid-sdd index` (or first `recall`) → index/recall.json (generated, ignored) → `recall` → agent
 code anchor → `recall` → docblock → ADR/spec/plan
 ```
 
@@ -681,10 +702,12 @@ nodes, and comment lengths agree.
 ### Prompts and review
 
 The agent decomposes accepted decisions into prompt contracts (one reviewable outcome,
-dependencies, disjoint write scopes, tests, acceptance commands). The CLI records state,
-indexes the plan and matrix, but does not execute prompts. Implementation and adversarial
-review run in separate agents; code review is independent, and the PM logic review verifies
-behaviour against PRD/TRD/Gherkin. `close` archives transients and snapshots state; Git
+dependencies, disjoint write scopes, tests, acceptance commands). A prompt that touches a
+cross-repo edge lists the `DEP-###` row IDs in its `dependency_refs` front matter; `prompt
+validate` checks those IDs against the ledger and `prompt show --json` exposes them. The CLI
+records state, indexes the plan and matrix, but does not execute prompts. Implementation and
+adversarial review run in separate agents; code review is independent, and the PM logic review
+verifies behaviour against PRD/TRD/Gherkin. `close` archives transients and snapshots state; Git
 merges remain orchestrator-driven.
 
 ### Workspace and migration
@@ -1425,9 +1448,29 @@ validation, while the agent orchestrates subagents, prompts, and reviews.
   comments explain only why or a non-obvious invariant, and history lives in the docblock.
 - Docblocks are UUID-named Markdown files under `docblocks_folder`; `History` names the
   relevant ADR, specification, requirement, or scenario.
-- `orchid-sdd recall <uuid|topic|question|path>` returns a compact context pack.
+- `orchid-sdd recall <uuid|topic|question|path|DEP-###>` returns a compact context pack; a
+  `DEP-###` query returns the ledger row and its resolved related ADR/test nodes. Retrieval is
+  index-backed: `.knowledge/index/recall.json` is generated and Git-ignored, so broad queries
+  scan the recent history window (last 3 closed iterations) instead of every snapshot, and exact
+  ids/aliases/UUIDs still search all history. Use `--summary` for one-line context packs and
+  `--full` for complete nodes.
 - `orchid-sdd lint` enforces anchors, anchor descriptions, docblock `History`, and the
   500-char comment limit.
+
+### Versioned vs generated
+
+- **Versioned**: `events/*.jsonl`, `manifest.jsonld`, iteration snapshots, and the small
+  deterministic indexes (`topics.json`, `questions.json`, `code-anchors.json`,
+  `requirements.json`, `dependencies.json`, `timeline.json`, `repos.json`,
+  `cross-repo-dependencies.json`).
+- **Generated (Git-ignored)**: `index/recall.json` (and future full-text/vector indexes).
+
+A fresh clone has no `recall.json`; it is rebuilt by `orchid-sdd index` or on the first `recall`.
+A missing `recall.json` never fails `index --check` or `doctor`. Never hand-edit it, and never
+copy it from another project. Projects that committed `recall.json` before this policy should
+untrack it once: `git rm --cached .knowledge/index/recall.json` (the local file remains a cache).
+Projects created before the ignore rule should rerun `orchid-sdd setup --force` or add the managed
+`.gitignore` line manually; `.gitignore` does not affect an already tracked file.
 
 ## Layout
 
@@ -1481,8 +1524,21 @@ the full lifecycle, abandon, history recall, resume, workspace detection, projec
 memory, clean-tree guards, migration backup/scaffold/finalize, the Claude Code plugin
 manifest, skill pointer, CLI wrapper, persona dossier consistency, steering setup/resolution,
 phase context, model effort resolution and mismatch alerts, prompt/run state, handoff
-checkpoints, project rule overrides, npm skill installation, and every profile’s
-personas/tests/constitution pack in temporary projects.
+checkpoints, project rule overrides, npm skill installation, every profile’s
+personas/tests/constitution pack in temporary projects, the recall index and its history
+modes, and deterministic alias resolution.
+
+## Recall benchmark
+
+`scripts/recall-bench.mjs` generates a synthetic closed-iteration history (default
+100 iterations × 500 nodes), rebuilds `.knowledge/index/recall.json`, and reports index size,
+build time, recall p50/p95 for topic/alias/description queries, hydrated snapshot count, and
+heap usage. It is not part of `npm test`:
+
+```bash
+node scripts/recall-bench.mjs            # default 100 x 500, 20 runs
+node scripts/recall-bench.mjs --iterations 50 --nodes 200 --runs 10
+```
 
 ## Known limits (v0.2)
 

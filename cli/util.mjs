@@ -124,6 +124,11 @@ export function writeJson(file, value) {
   atomicWrite(file, `${JSON.stringify(value, null, 2)}\n`);
 }
 
+/** Write a generated cache without indentation; content is machine-read only. */
+export function writeJsonCompact(file, value) {
+  atomicWrite(file, `${JSON.stringify(value)}\n`);
+}
+
 export function deepMerge(base, override) {
   if (!override || typeof override !== "object" || Array.isArray(override)) return base;
   const out = { ...base };
@@ -215,6 +220,18 @@ export function splitSemicolons(value) {
     .split(";")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+/**
+ * Lowercase alphanumeric tokens, shared by the recall index (`terms`) and recall
+ * scoring. Length-1 tokens are dropped so code IDs like `R-001` do not leave a
+ * stray `r` that spurious-matches unrelated IDs.
+ */
+export function tokenize(value) {
+  return String(value || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length > 1);
 }
 
 export function truncate(value, length = 160) {

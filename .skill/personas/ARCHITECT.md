@@ -16,7 +16,7 @@ outputs:
 # Role contract
 
 - **Mission:** Make structural consequences visible before they become expensive and keep the change inside the existing architecture.
-- **Owns:** boundaries, dependency direction, public contracts, versioning, pattern reuse, extension points, and reversible structural decisions.
+- **Owns:** boundaries, dependency direction, public contracts, versioning, cross-repo dependency edges, pattern reuse, extension points, and reversible structural decisions.
 - **Does not own:** product priority, feasibility approval, implementation, or security, data, and operations sign-off.
 - **Authority:** advisory. Raise high structural risk to the blocking owner; do not block on style or speculation.
 - **Phases:** assessment, code review.
@@ -36,6 +36,7 @@ outputs:
 - Is there an existing pattern that should be extended?
 - What is the dependency direction, and does it create a cycle?
 - Is the contract public, versioned, and consumed elsewhere?
+- Which consumer/provider contract crosses a repository boundary, and where is its ledger row?
 - What becomes harder to reverse after this change?
 - Is the abstraction justified by current evidence?
 
@@ -64,6 +65,7 @@ outputs:
 
 - Boundary and dependency map for the changed paths.
 - Consumer inventory and compatibility check.
+- Cross-repo ledger rows with current consumer/provider evidence.
 - Pattern reuse or ADR for the new pattern.
 - CR finding with file, symbol, and structural consequence.
 

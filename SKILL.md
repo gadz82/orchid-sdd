@@ -68,7 +68,10 @@ Shape the update for the phase:
 4. Run `orchid-sdd steering context --phase <current-phase>` and read every active rule.
 5. Run `orchid-sdd route --phase <current-phase>`; if the current model/agent is unknown or
    does not match the expected assignment, stop and tell the user. Never switch automatically.
-6. Never load the whole knowledge graph; query `orchid-sdd recall <topic|question|uuid|path>`.
+6. Never load the whole knowledge graph; query `orchid-sdd recall <topic|question|uuid|path|DEP-###>`.
+7. In workspace mode, read `.orchid/cross-repo-dependencies.md` or run
+   `orchid-sdd dependencies list --status open --json` to load open cross-repo edges for the
+   changed repos.
 
 # Command map
 
@@ -81,6 +84,7 @@ Shape the update for the phase:
 | Apply phase steering | `orchid-sdd steering context --phase <phase>` |
 | Resolve model/agent | `orchid-sdd route --phase <phase> [--prompt P-003] [--current-agent NAME] [--current-model NAME]` |
 | Track a prompt | `orchid-sdd prompt start P-003 --step implement` / `prompt step` / `prompt complete` |
+| Validate prompt contracts | `orchid-sdd prompt validate [--json]` |
 | Save/resume a handoff | `orchid-sdd handoff prepare` / `orchid-sdd resume` / `handoff list` / `handoff accept <id>` |
 | Convert an existing project/workspace | `orchid-sdd migrate scan\|backup\|init\|status\|finalize` |
 | Validate setup/sources | `orchid-sdd doctor [--ci] [--online] [--fix]` |
@@ -95,8 +99,9 @@ Shape the update for the phase:
 | Abandon | `orchid-sdd abandon "<reason>"` |
 | Record memory | `orchid-sdd record --type T ...` |
 | Rebuild/verify indexes | `orchid-sdd index [--check]` |
-| Resolve memory | `orchid-sdd recall <query>` |
+| Resolve memory | `orchid-sdd recall <query> [--repo ID] [--hops 1\|2] [--limit N] [--summary] [--history recent\|all\|none]` |
 | Validate anchors/docblocks | `orchid-sdd lint [--check]` |
+| List/check cross-repo dependencies | `orchid-sdd dependencies list [--repo ID] [--status S] [--kind K] [--json]` / `dependencies check [--json]` |
 | Record a gate | `orchid-sdd gate pass G# --evidence <path>` |
 | Resume after crash or handoff | `orchid-sdd resume [--handoff latest\|ID]` |
 
@@ -115,8 +120,8 @@ A gate passes only with evidence. Never pass a gate on a promise.
 | G2 Discovery | impact, boundaries, Gherkin, consistency report, steering constraints; zero blocking questions or recorded assumptions | if scope changed |
 | G3 Assessment | impact map, contracts, regressions, options/ADRs, go/no-go | yes |
 | G4 Plan | valid DAG, disjoint waves, coverage, cost estimate within budget | yes |
-| G5 Prompt | acceptance met, tests green, CR passed, anchors/docblocks valid, merged to integration | per prompt, no |
-| G6 Logic review | scenarios verified; steering review complete; no open business or blocking steering findings; scope matches intent | yes |
+| G5 Prompt | acceptance met, tests green, CR passed, anchors/docblocks valid, touched cross-repo dependency rows verified, merged to integration | per prompt, no |
+| G6 Logic review | scenarios verified; steering review complete; no open business or blocking steering findings; touched cross-repo dependency rows verified or waived; scope matches intent | yes |
 | G7 Closure | prompts done/waived; audit archived; feature/integration merged to base or current branch already base; prompt branches deleted; release notes | yes |
 | G8 Handover | HANDOVER.md + tour.md verified | yes |
 
@@ -204,6 +209,9 @@ Artifacts: `assessment/impact-map.md`, `contracts.md`, `data-impact.md`,
 
 - Read the assessment steering context and record boundary, style, example, and repository
   implications in `assessment/steering.md`.
+- Record every cross-repo dependency discovered here in `.orchid/cross-repo-dependencies.md` (template:
+  `.skill/templates/artifacts/cross-repo-dependencies.md`). A row names consumer, provider,
+  contract/version, failure mode, regression evidence, owner, and status.
 - Run only the lenses the change needs; each produces evidence and confidence.
 - Magnitude: scope, risk 1–5, reversibility, effort, confidence, blast radius.
 - Options only when a genuine trade-off exists; otherwise state the single viable path.
@@ -220,6 +228,8 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 - One prompt, one reviewable outcome; tests are part of the deliverable.
 - `type: build | test | spike`; spike prompts carry `timebox` and a findings deliverable.
 - Dependencies are explicit; write scopes are disjoint within a wave.
+- Prompts that touch a cross-repo edge cite the `DEP-###` row IDs in `dependency_refs` (they
+  reference the ledger; they never copy its rows). Validate with `orchid-sdd prompt validate`.
 - Every prompt cites requirements/scenarios, memory refs, constitution sections, active steering
   rule IDs, applicable project code examples, and an executable acceptance command.
 - Prompt constraints keep comments why-only and put history in the docblock.
@@ -246,6 +256,11 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 - Review with a fresh-context reviewer routed by paths/topics. Batch CR is allowed for
   S-size work; independence and the rubric are unchanged. Check active steering rules and cite
   violations in `reviews/steering.md`.
+- In workspace mode, CR opens every `DEP-###` row that touches a changed repo. The reviewer
+  receives the prompt's resolved dependency rows (from `dependency_refs`, via
+  `orchid-sdd prompt validate --json` or `orchid-sdd recall DEP-###`) plus current
+  consumer/provider evidence. Check contract and version, deployment order, failure isolation,
+  and cross-repo regression evidence. A missing row or stale evidence blocks.
 - Fix loop up to `max_fix_loops`; then `escalated`: accept with ADR, split, or revert.
 - Merge to the iteration's feature/integration branch in wave order, or to the current branch
   when the user chose no feature branch. Do not merge to the default branch during build
@@ -270,6 +285,9 @@ Artifacts: `reviews/logic-review.md`, `reviews/steering-review.md`.
   (`HANDOVER.md` + `tour.md`); it is not a Phase 6 artifact.
 - For each steering rule, record `satisfied`, `not applicable`, `finding`, or `waived` with
   current evidence in `reviews/steering-review.md`; a blocking rule without evidence stops G6.
+- Confirm every `DEP-###` row touched by the integration diff is `verified` or `waived` with an
+  ADR. A missing row is a finding, not an assumption. Use
+  `orchid-sdd dependencies check` to validate the ledger.
 - Findings become new prompts (spec version increments) or a waived risk with an ADR.
 - Loop capped at `reviews.logic.max_loops`; survivors become a follow-up iteration.
 - End with the human-gate request: **Approve the changes and move forward.** Include the
@@ -424,7 +442,28 @@ orchid-sdd record --type Decision --scope project --repo <repo-id> \
 
 When you see an anchor: `orchid-sdd recall <uuid>` → read the node, docblock, relations,
 ADR/spec. Expand at most two hops. Query by topic/question before reading the graph.
-If the CLI is unavailable, read `manifest.jsonld` and `index/` directly (plain JSON).
+If the CLI is unavailable, read `manifest.jsonld` and the versioned core indexes
+(`index/topics.json`, `index/questions.json`, …) directly (plain JSON). `index/recall.json` is
+generated and Git-ignored; never hand-edit it, and never copy it from another project. When it is
+missing or stale, run `orchid-sdd index` (preferred) or let the first `recall` rebuild it. If the
+CLI is unavailable, warn the user before retrieval: "The recall index cannot be rebuilt without
+the orchid-sdd CLI. Retrieval is limited to `manifest.jsonld` and the versioned core indexes."
+
+- `orchid-sdd recall <topic|question|uuid|alias|path>` resolves memory nodes; ranking is
+  deterministic (exact id/alias > topic > code anchor > phrase > token overlap, with active
+  and project-scoped nodes boosted). Closed-iteration history is indexed and loaded lazily:
+  broad queries search the last 3 closed iterations by default, while exact ids/aliases/UUIDs
+  search all history. Use `--history all` to search the full index or `--history none` for
+  active + project-scoped memory only.
+- For normal context packs use `orchid-sdd recall <query> --summary` (compact one-line
+  results, no relation bodies); use `orchid-sdd recall <id> --full` when you need a complete
+  node. `--budget <bytes>` trims the summary to fit a context budget.
+- `orchid-sdd recall DEP-###` resolves a cross-repo ledger row and its `Related` ADR/test
+  nodes in one call; use `--repo <id>` to narrow to a repo and `--limit N` to cap results.
+- Ordinary memory lookup is one hop (`--hops 1`, the default). When a dependency row is
+  matched, its `Related` nodes are resolved first and then expanded by the requested hops.
+- CR may follow a dependency chain with `orchid-sdd recall DEP-### --hops 2`; keep ordinary
+  lookups at one hop.
 
 # Personas
 
@@ -444,7 +483,10 @@ the active body concise.
 # Adversarial CR
 
 Reviewer inputs: diff, prompt contract, requirements/scenarios, constitution sections,
-tests, 1-hop memory. Try to falsify the change; produce evidence, not opinions.
+tests, 1-hop memory, and the open `DEP-###` rows for every changed repo
+(`orchid-sdd dependencies list --status open --json`, or
+`orchid-sdd recall DEP-### --hops 2` to follow a dependency chain). Try to falsify the change;
+produce evidence, not opinions.
 
 | Dimension | Check |
 |---|---|
@@ -456,6 +498,8 @@ tests, 1-hop memory. Try to falsify the change; produce evidence, not opinions.
 | Operability | Logs, metrics, errors, config, deployability |
 | Constitution | Cited sections; deviations have ADRs |
 | Steering | Active rules cited; architecture, style, example, and repository evidence |
+| Dependencies | Prompt DAG and cross-repo ledger rows are current, owned, and evidenced |
+| Cross-repo | Consumer/provider contract, version skew, deployment order, failure isolation |
 | Scope | No unrelated changes or drive-by refactors |
 | Documentation | Anchor/docblock accurate for significant units |
 
@@ -470,6 +514,7 @@ Severities: critical, high, medium, low. `block_on` gates critical/high.
 - CR loop exhausted: `escalated` → accept-with-ADR, split, or revert; human arbitrates.
 - Logic loop exhausted: follow-up iteration (`followUpTo`) or waived risk with ADR.
 - Merge conflict: stop; do not improvise. Re-plan the affected prompts.
+- Unresolved cross-repo dependency: block the prompt or CR until the `DEP-###` row is verified or waived with an ADR.
 - Crash: `orchid-sdd resume` replays events, aborts half-finished merges, re-queues prompts.
 - Ambiguity: write a Markdown questionnaire; never make a business decision silently.
 
@@ -486,6 +531,23 @@ never run `setup` inside a repo.
 - `start` requires a clean tree across root and enabled repos; `--allow-dirty` is explicit.
 - `close` records each repo's HEAD in the iteration snapshot. The orchestrator still performs
   per-repo commits/merges; the CLI does not run Git merges.
+
+## Cross-repo dependencies
+
+In workspace mode, record cross-repo edges in `.orchid/cross-repo-dependencies.md` as soon as they are
+discovered (template: `.skill/templates/artifacts/cross-repo-dependencies.md`). This ledger is separate
+from `.knowledge/index/cross-repo-dependencies.json` (its generated index) and
+`.knowledge/index/dependencies.json`, which is the prompt DAG.
+
+- Use one `DEP-###` row per consumer/provider edge; name both repo IDs and the contract version.
+- Record kind, contract, version, failure mode, rollout, consumer/provider evidence, owner,
+  status, and last verification.
+- Cite the row ID in the assessment, prompt contract, CR, and logic review.
+- CR must open every row that touches a changed repo and require current consumer/provider
+  regression evidence. A missing row or stale evidence blocks.
+- Update status only with evidence; close or waive with a reason. Never delete history.
+- Query and validate it with `orchid-sdd dependencies list|check`; run
+  `orchid-sdd index` after editing so the generated index stays current.
 
 # Migration
 
@@ -525,3 +587,4 @@ project code-style examples without explicit approval.
 11. Never pass G2 or G6 with an unresolved blocking steering rule; cite evidence or record an ADR.
 12. Never silently continue after a model/agent mismatch; notify the user and let them decide.
 13. Never generate project code-style examples during migration before explicit human approval.
+14. Never leave a discovered cross-repo dependency only in chat; record it as a `DEP-###` row in `.orchid/cross-repo-dependencies.md`.

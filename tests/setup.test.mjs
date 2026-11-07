@@ -41,6 +41,13 @@ test("setup creates a valid workspace and doctor passes", () => {
   assert.equal(check.code, 0, check.all);
 });
 
+test("state schema includes the memory revision cursor", () => {
+  const schema = JSON.parse(
+    fs.readFileSync(path.join(ROOT, ".skill", "schemas", "state.schema.json"), "utf8"),
+  );
+  assert.deepEqual(schema.properties.memoryEvent.type, ["string", "null"]);
+});
+
 test("unknown config keys are rejected", () => {
   const root = tmp();
   setup(root);

@@ -85,6 +85,7 @@ failure paths; closure confirms the acceptance matrix and residual risk.
 | Residual risk | Untested paths are explicit and accepted |
 | Independence | The test was written or verified outside the implementer's transcript |
 | Reproducibility | A reviewer can rerun the command and get the same verdict |
+| Cross-repo regression | Consumer and provider contract tests cover success, failure, and version-skew paths |
 
 ## Anti-patterns
 
@@ -108,6 +109,7 @@ blocker must name the criterion and the evidence that would clear it.
 - Phase cast: assessment, build, code review.
 - Topics: testing, regression.
 - Acceptance criteria, a bug fix, a flaky test, or a change to a public contract, migration, auth, or critical journey.
+- A change that touches a cross-repo dependency row.
 
 ## Example findings
 

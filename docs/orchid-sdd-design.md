@@ -492,7 +492,8 @@ The orchestrator is the primary agent session in the host harness — in OpenCod
   "prompts": { "P-003": { "status": "running", "step": "tests", "attempt": 1 } },
   "runs": { "run_01J...": { "prompt": "P-003", "status": "running" } },
   "lastHandoff": null,
-  "lastEvent": "evt_01J..."
+  "lastEvent": "evt_01J...",
+  "memoryEvent": "evt_01J..."
 }
 ```
 
@@ -1187,10 +1188,11 @@ Indexes are generated from the manifest after each gate and each execution wave.
 | **Repos** (workspace) | Which memories belong to repo `orchid`? | `{repo: [uuid]}` |
 | **Dependencies** | What can run now, and what must wait? | `{prompt: {dependsOn, wave, writeScopes}}` |
 | **Timeline** | What happened, in what order? | `[{ts, event, iteration, phase}]` |
+| **Recall** | Which compact records + postings power `recall`? | `{nodes, terms, topicsIndex, aliasesIndex, questionsIndex, codeAnchorsIndex}` |
 | **Supersession** (opt-in) | What replaced this decision? | `{uuid: [successor]}` |
 | **Full text** (opt-in) | Where does this phrase appear? | BM25 or simple inverted index |
 
-`knowledge.indexing` enables the core indexes, including `repos` for workspace memory; `supersession` and `full-text` are opt-in. The optional set is defined here and nowhere else.
+`knowledge.indexing` enables the core indexes, including `repos` for workspace memory; `supersession` and `full-text` are opt-in. The optional set is defined here and nowhere else. `recall.json` is a generated, Git-ignored artifact: `orchid-sdd index` and `setup` write it, `recall` rebuilds it on demand when missing or stale, and it is never hand-edited or committed. A fresh clone has no `recall.json`; it is rebuilt by `orchid-sdd index` or the first `recall`.
 
 Example `requirements.json`:
 
@@ -1367,7 +1369,7 @@ PRD §3.2 + Gherkin S-003 + prior iteration 2026-09-10-sso
 5. If behaviour or rationale changes, update the docblock and add a decision node; do not rewrite history.
 6. If no anchor exists and the anchor policy (§7.6) requires one, create it and its docblock as part of the prompt.
 
-**Top-down retrieval** for new work is the mirror image: search the question and topic indexes for prior art, then read the linked decisions before proposing a new pattern. The `recall` command returns a compact context pack — node, artifact excerpt, relations, and index neighbors — with a default of one hop and a hard maximum of two. This is the main defence against context bloat.
+**Top-down retrieval** for new work is the mirror image: search the question and topic indexes for prior art, then read the linked decisions before proposing a new pattern. The `recall` command returns a compact context pack — node, artifact excerpt, relations, and index neighbors — with a default of one hop and a hard maximum of two. This is the main defence against context bloat. Retrieval is index-backed: `orchid-sdd index` writes a generated `.knowledge/index/recall.json` (compact per-node records plus `terms`, topic, alias, question, and code-anchor postings) that `recall` loads once and scores without reading every archived snapshot. Closed-iteration history is evidence-on-demand, not eagerly loaded: broad topic/token queries search the last three closed iterations by default (`--history recent`), exact ids/aliases/UUIDs search all history, `--history all` scans the full index, and `--history none` limits to active + project-scoped memory. Only the top-K matches and their related nodes are hydrated from their snapshots (each snapshot read at most once), and `--summary` returns compact one-line results without hydration at all.
 
 **Portability.** The CLI is a convenience, not a dependency. Every index and the manifest are plain files. An agent that has never heard of orchid-sdd can still read them — provided it knows they exist. That is the job of the cold-agent contract.
 
@@ -2549,7 +2551,105 @@ rules survive iteration closure. It is included in the closed iteration snapshot
 - Migration and workspace mode can coexist: root knowledge is authoritative, repo fragments
   are configuration only.
 
-### 21.7 Limits
+### 21.7 Cross-repo dependencies
+
+Cross-repo edges are tracked in `.orchid/cross-repo-dependencies.md`, a Markdown table that is
+the single source of truth, separate from the prompt DAG in `.knowledge/index/dependencies.json`.
+`orchid-sdd index` generates `.knowledge/index/cross-repo-dependencies.json` from the ledger and
+adds `crossRepoDependencies` to the manifest `indexes` map; `index --check` reports drift when
+the ledger is edited without reindexing.
+
+| ID | Kind | Consumer | Provider | Contract | Version | Failure mode | Rollout | Consumer evidence | Provider evidence | Owner | Status | Last verified | Related |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+
+- `ID` is `DEP-###` and unique. `Kind` is `api`, `event`, `package`, `schema`, `runtime`, or `data`.
+- `Consumer`/`Provider` start with an enabled `workspace.repos[]` id, then `/`.
+- `Contract`, `Version`, `Failure mode`, `Rollout` (`n/a` when unconstrained), and `Owner` are required.
+- `Consumer evidence`/`Provider evidence` and `Last verified` (ISO date or 7–40 char hex SHA) are required for `verified`.
+- `Status` is `open`, `verified`, `waived`, or `closed`. `waived` requires an `ADR-###` in `Related`.
+- Rows are never deleted; they are closed or waived with a reason.
+
+The ledger is queried and validated with `orchid-sdd dependencies list|check`; `doctor` runs the
+same validation (an invalid ledger is an error, a missing ledger in workspace mode is a warning,
+and a valid ledger reports a row count). `dependencies list --json` and `dependencies check --json`
+both return a stable envelope `{ "ok": true, "rows": [], "errors": [], "warnings": [] }` (`ok` is
+`false` and `rows` is empty when the ledger is invalid; the exit code is 1). An invalid ledger
+also blocks every projection write before the manifest or generated cross-repo index changes;
+`index --check` and `recall` validate it too. `Related` IDs should name project-scoped aliases or
+UUIDs for stable resolution; an iteration-scoped alias that repeats across iterations resolves to
+the active (most recent) node, and `alias@iteration` or a UUID pins a historical node. CR opens
+every row that
+touches a changed repo and checks contract/version compatibility, deployment order, failure
+isolation, and consumer/provider regression evidence. A missing row or stale evidence blocks.
+Rows are project-scoped and survive iteration closure; a waived row names the ADR.
+
+Retrieval is dependency-aware without a new node type. `orchid-sdd recall DEP-###` resolves a
+ledger row (matched by exact ID, contract, repo, or consumer/provider/owner token overlap) and
+its `Related` `ADR-###`/`R-###`/`T-###`/`P-###` references to the corresponding memory nodes.
+`--repo` filters rows by consumer/provider repo, `--limit` caps matches and rows, and `--hops 2`
+follows a dependency chain from a matched row.
+
+Recall scores memory nodes deterministically (exact id/alias 100 > topic 80 > code anchor 70 >
+phrase 60 > all-tokens 40+5/token > partial 10), then boosts active (+20), project-scoped (+15),
+and last-closed-iteration (+10) nodes and downranks superseded nodes (−50). It ranks compact
+entries from a generated `.knowledge/index/recall.json` (active manifest + archived snapshots,
+deduplicated by `@id` with the active manifest winning) and hydrates only the top-K matches and
+their related nodes, reading each snapshot at most once. The generated file stores posting lists
+as node ordinals and is written without indentation; `recall` expands ordinals to ids after load,
+which keeps large histories compact without changing query semantics. Index postings are a candidate union,
+never an exclusive filter: a node that matches by alias, description, answer, or token stays a
+candidate even when another node matched an exact topic first. Identifier queries (UUIDs and
+code IDs such as `DEP-###`, `R-###`, `ADR-###`) skip the token-overlap fallback for both memory
+nodes and dependency rows, and skip the token postings entirely (exact maps only), so a numeric
+suffix never drags in unrelated results. Superseded nodes are filtered on their base tier before
+the −50 penalty, so `--include-superseded` keeps even partial matches. On a score tie, the most
+recently created node wins.
+
+`recall.json` is a generated, Git-ignored artifact, maintained lazily: `orchid-sdd index` (and
+`setup`) rebuild it, while `record`, `start`, `gate`, and phase transitions write only the manifest
+and core indexes. `recall` detects a stale or missing index via a memory-specific revision (the last
+`node.recorded`/`node.updated`/`iteration.closed`/`iteration.abandoned` event, not gate or phase
+events) stored as `lastEventId`, and also compares `activeIteration` and `schemaVersion` before
+reusing an index. `resume` recomputes `memoryEvent` from the replayed events, so recovery cannot
+reuse an index that predates the lost cursor. The index rebuilds on demand, so the frequent write
+path never pays the snapshot-read + posting-build cost and a gate or phase change never triggers a
+rebuild. A
+missing `recall.json` is never projection drift and never fails `index --check` or `doctor`; it is
+rebuilt by `orchid-sdd index` or the first `recall`. The `terms` map indexes alias/topic/question/
+code-anchor/description tokens only (not the per-node UUID, which `recall` resolves directly), and
+an `incomingRelations` map makes reverse hop expansion O(degree) instead of a full-node scan.
+
+Versioning split: events, `manifest.jsonld`, iteration snapshots, and the small deterministic core
+indexes (`topics.json`, `questions.json`, `code-anchors.json`, `requirements.json`,
+`dependencies.json`, `timeline.json`, `repos.json`, `cross-repo-dependencies.json`) are versioned;
+`recall.json` (and any future full-text/vector index) is generated and ignored.
+
+Closed-iteration history is evidence-on-demand. Broad queries search the last three closed
+iterations by default (`--history recent`); `--history all` scans the full index, `--history none`
+limits to active + project-scoped memory, and `--iteration <id>` targets one closed iteration in
+addition to active/project. Exact id/alias/UUID lookups bypass the window and search all history.
+`--summary` returns compact one-line results (no relation bodies) without hydrating snapshots,
+`--budget <bytes>` trims the summary to fit a context budget, and `--full` hydrates complete
+nodes.
+
+`Related` references resolve deterministically: exact `@id`, then `alias@iteration`, then the
+active-iteration node with the alias, then the most recent historical node by iteration and
+`createdAt`; an unresolved reference is reported explicitly rather than dropped silently.
+Dependency rows are loaded directly from the ledger, which remains authoritative.
+
+Prompt contracts reference the ledger without copying it. An optional `dependency_refs` array in
+prompt front matter (`^DEP-[0-9]{3}$`, unique) names the rows a prompt touches;
+`orchid-sdd prompt validate` checks those IDs against the ledger (plus `depends_on` references
+and duplicate prompt IDs) and returns the resolved rows per prompt, and `prompt show --json`
+exposes the field. The ledger remains the single source of truth.
+
+A first-class `Dependency` node type is intentionally **not** introduced: `dependency_refs` plus
+`recall DEP-###` cover the orchestrator's needs (validate references, resolve rows and evidence,
+follow chains) without a second source of truth, a new event type, or a manifest field. If
+future needs exceed this (e.g. querying "which prompts depend on a repo" without a ledger scan),
+a dedicated node type would be reconsidered as a separate milestone.
+
+### 21.8 Limits
 
 - No automatic multi-repo branch/merge orchestration.
 - No submodule/gitlink semantics beyond path and Git detection.

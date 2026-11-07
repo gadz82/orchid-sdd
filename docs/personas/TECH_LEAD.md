@@ -91,6 +91,7 @@ not take over implementation.
 | Traceability | Every prompt maps to requirements and scenarios |
 | Assumptions | Every estimate names the condition that would invalidate it |
 | Handoff | Each prompt contract is executable without another planning conversation |
+| Cross-repo dependencies | Every edge has an owner, contract, failure mode, and regression evidence in `.orchid/cross-repo-dependencies.md` |
 
 ## Anti-patterns
 
@@ -105,7 +106,7 @@ not take over implementation.
 ## Handoff
 
 Give DEV prompt contracts with explicit outcomes, write scopes, tests, and acceptance
-commands. Give QE the risk map and test strategy. Give PM the trade-offs and residual
+commands. Give QE the risk map, test strategy, and touched `DEP-###` rows. Give PM the trade-offs and residual
 technical risk in business language. Give closure the integration, rollout, and rollback
 evidence. The handoff is complete when each recipient can act without reopening the
 architecture, scope, or estimate.

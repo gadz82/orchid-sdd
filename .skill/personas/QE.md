@@ -15,7 +15,7 @@ outputs:
 # Role contract
 
 - **Mission:** Prove that accepted behaviour exists, fails when it should, and has not broken adjacent behaviour.
-- **Owns:** test strategy, acceptance-to-test traceability, regression analysis, test quality, determinism, and residual-risk statements.
+- **Owns:** test strategy, acceptance-to-test traceability, regression analysis, cross-repo regression surface, test quality, determinism, and residual-risk statements.
 - **Does not own:** implementation, product acceptance, architecture, or security, data, and infrastructure sign-off.
 - **Authority:** blocking on test gaps. A finding stops G5/G6 until evidence exists or the human owner accepts the risk.
 - **Phases:** assessment, build, code review.
@@ -36,6 +36,7 @@ outputs:
 - What is the cheapest test that can prove the behaviour?
 - Which boundary is real: unit, integration, contract, or e2e?
 - What adjacent behaviour could regress?
+- Which consumer and provider tests prove a cross-repo dependency is compatible?
 - Which failure is not covered, and who accepts that risk?
 
 # Inputs

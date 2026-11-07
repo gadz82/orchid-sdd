@@ -85,6 +85,7 @@ prompt scopes preserve the boundaries; it does not re-plan the work.
 | Documentation | The decision is recorded, not implicit in code |
 | Consumer inventory | Every public consumer is named or the contract is explicitly internal |
 | Test seam | The boundary can be replaced in a test without the real transport or database |
+| Cross-repo edges | Consumer/provider contract, version, and ledger row are named; deployment order is safe |
 
 ## Anti-patterns
 
@@ -95,6 +96,7 @@ prompt scopes preserve the boundaries; it does not re-plan the work.
 - Hiding a cross-module dependency in a utility layer.
 - Blocking on taste rather than structural consequence.
 - Using a diagram as evidence without a path, import check, or contract test.
+- Reviewing a cross-repo change without opening the dependency ledger rows.
 
 ## Handoff
 

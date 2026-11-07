@@ -6,8 +6,9 @@ import { loadPersonas, validatePersonaRefs } from "./registry.mjs";
 import { loadSteering, validateSteeringRefs } from "./steering.mjs";
 import { validateWorkspace } from "./workspace.mjs";
 import { CONTEXT } from "./setup.mjs";
-import { checkProjection, paths, readState, writeProjection } from "./store.mjs";
+import { checkProjection, loadManifestNodes, paths, readState, recallIndexProblem, writeProjection } from "./store.mjs";
 import { ensureDir, exists, formatJson, readJson, writeJson } from "./util.mjs";
+import { LEDGER_FILE, formatLedgerDiagnostic, parseRelatedIds, readLedger } from "./dependencies.mjs";
 
 export function runDoctor(root, skillRoot, options = {}) {
   const errors = [];
@@ -76,8 +77,12 @@ export function runDoctor(root, skillRoot, options = {}) {
 
   if (!exists(p.manifest)) {
     if (options.fix && state) {
-      writeProjection(root, config, state);
-      fixes.push("rebuilt manifest and indexes");
+      try {
+        writeProjection(root, config, state, { recall: true });
+        fixes.push("rebuilt manifest and indexes");
+      } catch (error) {
+        fail(`cannot rebuild projection: ${error.message}`);
+      }
     } else {
       fail("manifest.jsonld is missing; run `orchid-sdd index`");
     }
@@ -127,6 +132,132 @@ export function runDoctor(root, skillRoot, options = {}) {
     }
   }
 
+  const ledger = readLedger(root, config);
+  if (ledger.workspaceEnabled && !ledger.present) {
+    warn(`cross-repo dependency ledger is missing: ${LEDGER_FILE}`);
+  }
+  for (const error of ledger.errors) {
+    fail(`cross-repo dependency ledger: ${formatLedgerDiagnostic(error)}`);
+  }
+  for (const warning of ledger.warnings) {
+    warn(`cross-repo dependency ledger: ${formatLedgerDiagnostic(warning)}`);
+  }
+  if (ledger.present) {
+    info(`dependencies: ${ledger.rows.length} row(s)`);
+  }
+
+  if (exists(p.manifest)) {
+    try {
+      const { active, history } = loadManifestNodes(root, config);
+      const byId = new Map();
+      const allNodes = [];
+      for (const node of active) {
+        byId.set(node["@id"], node);
+        allNodes.push(node);
+      }
+      for (const node of history) {
+        if (!byId.has(node["@id"])) {
+          byId.set(node["@id"], node);
+          allNodes.push(node);
+        }
+      }
+
+      const isProject = (node) =>
+        node.scope === "project" || node.iteration === null || node.iteration === "project";
+
+      // Alias uniqueness: project-scoped aliases are globally unique; iteration-scoped
+      // aliases are unique only within the active iteration. Historical iteration-scoped
+      // nodes do not participate.
+      const projectNodes = [];
+      const iterationNodes = [];
+      for (const node of active) (isProject(node) ? projectNodes : iterationNodes).push(node);
+      const activeIds = new Set(active.map((node) => node["@id"]));
+      for (const node of history) {
+        if (isProject(node) && !activeIds.has(node["@id"])) {
+          projectNodes.push(node);
+          activeIds.add(node["@id"]);
+        }
+      }
+
+      const byRef = new Map();
+      const nodesByAlias = new Map();
+      for (const node of allNodes) {
+        byRef.set(node["@id"], node);
+        for (const alias of node.aliases || []) {
+          const key = String(alias).toLowerCase();
+          if (!byRef.has(key)) byRef.set(key, node);
+          if (!nodesByAlias.has(key)) nodesByAlias.set(key, []);
+          nodesByAlias.get(key).push(node);
+        }
+      }
+
+      // Resolve the same forms as recall: exact @id, exact alias, then
+      // alias@iteration for a pinned historical node.
+      const resolveRef = (ref) => {
+        const raw = String(ref || "");
+        if (!raw) return null;
+        if (byRef.has(raw)) return byRef.get(raw);
+        const lower = raw.toLowerCase();
+        if (byRef.has(lower)) return byRef.get(lower);
+        const at = raw.indexOf("@");
+        if (at > 0) {
+          const alias = raw.slice(0, at).toLowerCase();
+          const iteration = raw.slice(at + 1);
+          return (nodesByAlias.get(alias) || []).find((node) => node.iteration === iteration) || null;
+        }
+        return null;
+      };
+
+      const checkAliases = (nodes, label) => {
+        const owners = new Map();
+        for (const node of nodes) {
+          for (const alias of node.aliases || []) {
+            const key = String(alias).toLowerCase();
+            if (!owners.has(key)) owners.set(key, new Set());
+            owners.get(key).add(node["@id"]);
+          }
+        }
+        for (const [alias, set] of owners) {
+          if (set.size > 1) {
+            fail(`duplicate ${label} alias "${alias}" on nodes: ${[...set].join(", ")}`);
+          }
+        }
+      };
+      checkAliases(projectNodes, "project-scoped");
+      checkAliases(iterationNodes, "iteration-scoped");
+
+      const projectTypes = new Set(["orchid:Decision", "orchid:ADR", "orchid:Requirement"]);
+      for (const node of allNodes) {
+        for (const relation of node.relations || []) {
+          const target = relation.target;
+          if (target && !resolveRef(target)) {
+            fail(`relation "${relation.predicate}" from ${node["@id"]} targets unresolved "${target}"`);
+          }
+        }
+        if (isProject(node) && projectTypes.has(node["@type"]) && !node.artifact) {
+          warn(`project-scoped ${String(node["@type"]).replace(/^orchid:/, "")} ${node["@id"]} has no artifact`);
+        }
+        if (!node.topics || node.topics.length === 0) {
+          warn(`node ${node["@id"]} has no topics`);
+        }
+        if (!node.description || !String(node.description).trim()) {
+          warn(`node ${node["@id"]} has an empty description`);
+        }
+      }
+      if (ledger.present) {
+        for (const row of ledger.rows) {
+          for (const ref of parseRelatedIds(row.Related)) {
+            if (!resolveRef(ref)) {
+              warn(`dependency ${row.ID} references unresolved Related "${ref}"`);
+            }
+          }
+        }
+      }
+    } catch (error) {
+      warn(`cannot check memory quality: ${error.message}`);
+    }
+  }
+
   for (const source of config.sources || []) {
     if (source.type === "local") {
       const dir = path.resolve(root, source.path);
@@ -166,12 +297,46 @@ export function runDoctor(root, skillRoot, options = {}) {
     } catch (error) {
       warn(`cannot verify projection: ${error.message}`);
     }
+    const recallFile = path.join(p.index, "recall.json");
+    if (!exists(recallFile)) {
+      info("recall index is generated; run `orchid-sdd index` or `recall` to rebuild it");
+    } else {
+      let recallProblem = null;
+      try {
+        recallProblem = recallIndexProblem(readJson(recallFile), state);
+      } catch {
+        recallProblem = "unreadable";
+      }
+      if (recallProblem) {
+        info(
+          `recall index is ${recallProblem === "unreadable" ? "unreadable" : "stale"}; run \`orchid-sdd index\` or \`recall\` to rebuild it`,
+        );
+      }
+      if (isTracked(root, recallFile)) {
+        const rel = path.relative(root, recallFile).split(path.sep).join("/");
+        warn(
+          `recall index is generated and ignored but still tracked by Git; run \`git rm --cached ${rel}\``,
+        );
+      }
+    }
   }
 
   if (options.ci) info("doctor --ci: offline checks only");
   if (!options.online) info("network probes skipped (use --online)");
   info(`config hash ${hash}`);
   return finish({ errors, warnings, infos, fixes }, options);
+}
+
+function isTracked(root, file) {
+  try {
+    const rel = path.relative(root, file).split(path.sep).join("/");
+    const result = spawnSync("git", ["-C", root, "ls-files", "--error-unmatch", rel], {
+      encoding: "utf8",
+    });
+    return result.status === 0;
+  } catch {
+    return false;
+  }
 }
 
 function finish(result, options) {

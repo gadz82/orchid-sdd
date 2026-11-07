@@ -17,6 +17,7 @@ deliverables:
 acceptance: []
 memory_refs: []
 constitution_refs: []
+dependency_refs: []
 estimate: S
 ---
 

@@ -25,6 +25,11 @@
     "acceptance": { "type": "array", "items": { "type": "string" } },
     "memory_refs": { "type": "array", "items": { "type": "string" } },
     "constitution_refs": { "type": "array", "items": { "type": "string" } },
+    "dependency_refs": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "pattern": "^DEP-[0-9]{3}$" }
+    },
     "estimate": { "enum": ["S", "M", "L"] },
     "effort": { "enum": ["low", "medium", "high", "extra-high", "ultra"] },
     "timebox": { "type": "string" }

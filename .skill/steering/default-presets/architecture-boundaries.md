@@ -45,12 +45,14 @@ at review time.
 - Cross-boundary data uses explicit types, not ORM rows or ad-hoc maps.
 - No business rule lives in a controller, migration, UI component, or job handler.
 - A new boundary names the port, the adapter, and the owner.
+- In workspace mode, each touched cross-repo edge has a `DEP-###` row with current consumer/provider evidence.
 
 # Evidence
 
 - Discovery: affected boundaries, ports, and constraints in `discovery/steering.md`.
 - Assessment: boundary decision and ADR reference in `assessment/steering.md`.
 - Code review: file and symbol evidence in `reviews/steering.md`.
+- Workspace: dependency ledger rows and consumer/provider regression tests.
 - Logic review: confirm behaviour crosses boundaries only through the agreed contracts.
 
 # Exceptions

@@ -6,6 +6,7 @@ import {
   appendEvent,
   checkProjection,
   loadManifest,
+  loadRecallIndexFresh,
   paths,
   readState,
   writeProjection,
@@ -20,9 +21,11 @@ import {
   sha256File,
   splitCommas,
   splitSemicolons,
+  tokenize,
   uuid7,
   walkFiles,
 } from "./util.mjs";
+import { formatLedgerErrors, parseRelatedIds, readLedger } from "./dependencies.mjs";
 
 export const NODE_TYPES = new Set([
   "Requirement",
@@ -159,6 +162,13 @@ export function record(root, args) {
 export function index(root, args) {
   const { config, state } = context(root);
   if (args.check) {
+    const ledger = readLedger(root, config);
+    if (ledger.errors.length) {
+      process.stdout.write(
+        `Cross-repo dependency ledger is invalid (.orchid/cross-repo-dependencies.md):\n${formatLedgerErrors(ledger)}\n`,
+      );
+      return 1;
+    }
     const drift = checkProjection(root, config, state);
     if (drift.length) {
       process.stdout.write(`Projection is stale:\n${drift.map((item) => `  - ${item}`).join("\n")}\n`);
@@ -168,7 +178,13 @@ export function index(root, args) {
     process.stdout.write("Projection is up to date.\n");
     return 0;
   }
-  const { manifest, indexes } = writeProjection(root, config, state);
+  const ledger = readLedger(root, config);
+  if (ledger.errors.length) {
+    throw new OrchidError(
+      `invalid cross-repo dependency ledger (.orchid/cross-repo-dependencies.md):\n${formatLedgerErrors(ledger)}`,
+    );
+  }
+  const { manifest, indexes } = writeProjection(root, config, state, { recall: true });
   if (args.json) {
     process.stdout.write(
       `${formatJson({
@@ -187,114 +203,526 @@ export function index(root, args) {
   return 0;
 }
 
-export function recall(root, args) {
-  const { config } = context(root);
-  const manifest = loadManifest(root, config);
-  const nodes = [...manifest.nodes];
-  for (const entry of manifest.history || []) {
-    if (!entry.manifest) continue;
-    const file = path.join(paths(root, config).knowledge, entry.manifest);
-    if (fs.existsSync(file)) {
-      try {
-        const snapshot = JSON.parse(fs.readFileSync(file, "utf8"));
-        nodes.push(...(snapshot.nodes || []));
-      } catch {
-        /* doctor reports unreadable history */
-      }
-    }
-  }
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
 
-  const query = String(args.query || "").trim();
-  if (!query) throw new OrchidError("recall requires a uuid, topic, question, or path");
-  const needle = query.toLowerCase().replace(/^urn:uuid:/, "");
-  const matches = [];
-  const seen = new Set();
-  const add = (node) => {
-    if (node && !seen.has(node["@id"])) {
-      seen.add(node["@id"]);
-      matches.push(node);
-    }
+function normalizeRef(value) {
+  return String(value || "").replace(/^urn:uuid:/, "").toLowerCase();
+}
+
+// Identifier-like queries (UUIDs and code IDs like DEP-001, R-001, ADR-012) are
+// matched exactly only: their numeric/hex suffix must never fall through to the
+// token-overlap fallback, which would spuriously match unrelated R-001 nodes.
+const IDENTIFIER_QUERY_RE =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[a-z]+-\d+)$/;
+
+function dependencyRepos(row) {
+  return [row.Consumer, row.Provider]
+    .map((value) => String(value || "").split("/")[0].trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function scoreDependency(row, queryLower, tokens, isIdentifier) {
+  const id = String(row.ID || "").toLowerCase();
+  const contract = String(row.Contract || "").toLowerCase();
+  const consumer = String(row.Consumer || "").toLowerCase();
+  const provider = String(row.Provider || "").toLowerCase();
+  const owner = String(row.Owner || "").toLowerCase();
+
+  if (id === queryLower) return 100;
+  if (contract === queryLower) return 80;
+  if (dependencyRepos(row).includes(queryLower)) return 70;
+
+  // Identifier queries do not use token overlap for rows either.
+  if (isIdentifier) return 0;
+
+  if (tokens.length) {
+    const tokenSet = new Set(tokenize([id, contract, consumer, provider, owner].join(" ")));
+    let matched = 0;
+    for (const token of tokens) if (tokenSet.has(token)) matched += 1;
+    if (matched > 0) return 10 * matched;
+  }
+  return 0;
+}
+
+function sortNodes(items) {
+  return items.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const createdA = String(a.node.createdAt || "");
+    const createdB = String(b.node.createdAt || "");
+    if (createdA !== createdB) return createdA > createdB ? -1 : 1;
+    const idA = a.node["@id"] || a.node.id;
+    const idB = b.node["@id"] || b.node.id;
+    return idA > idB ? -1 : 1;
+  });
+}
+
+function sortDependencies(items) {
+  return items.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return String(a.row.ID).localeCompare(String(b.row.ID));
+  });
+}
+
+const RECENT_HISTORY_WINDOW = 3;
+const HISTORY_MODES = new Set(["recent", "all", "none"]);
+
+function summarizeEntry(entry, score, why) {
+  return {
+    id: entry.id,
+    type: entry.type,
+    description: entry.description,
+    artifact: entry.artifact,
+    score,
+    why,
+    iteration: entry.iteration,
+    scope: entry.scope,
+    supersededBy: entry.supersededBy,
   };
+}
 
-  for (const node of nodes) {
-    if (args.repo && node.repo !== args.repo) continue;
-    const id = node["@id"].replace(/^urn:uuid:/, "").toLowerCase();
-    const aliases = (node.aliases || []).map((value) => String(value).toLowerCase());
-    const topics = (node.topics || []).map((value) => String(value).toLowerCase());
-    const answers = (node.answers || []).map((value) => String(value).toLowerCase());
-    const code = String(node.codeAnchor || "").toLowerCase();
-    const description = String(node.description || "").toLowerCase();
-    if (
-      id === needle ||
-      aliases.includes(needle) ||
-      topics.includes(needle) ||
-      answers.some((value) => value.includes(needle)) ||
-      (code && (code === needle || code.includes(needle))) ||
-      description.includes(needle)
-    ) {
-      add(node);
+/**
+ * Score a compact index entry. Base tiers mirror the full-node matcher; on top of
+ * that, active/project/last-closed nodes get a boost and superseded nodes are
+ * downranked. Returns `{ score, why }` so summary output can explain the match.
+ */
+function rankNode(entry, queryLower, tokens, isIdentifier, rankCtx) {
+  const id = normalizeRef(entry.id);
+  const aliases = (entry.aliases || []).map((value) => String(value).toLowerCase());
+  const topics = (entry.topics || []).map((value) => String(value).toLowerCase());
+  const answers = (entry.questions || []).map((value) => String(value).toLowerCase());
+  const code = String(entry.codeAnchor || "").toLowerCase();
+  const description = String(entry.description || "").toLowerCase();
+
+  let base = 0;
+  let why = null;
+  if (id === queryLower) {
+    base = 100;
+    why = "id";
+  } else if (aliases.includes(queryLower)) {
+    base = 100;
+    why = "alias";
+  } else if (topics.includes(queryLower)) {
+    base = 80;
+    why = "topic";
+  } else if (code && code === queryLower) {
+    base = 70;
+    why = "code anchor";
+  } else if (description.includes(queryLower) || answers.some((value) => value.includes(queryLower))) {
+    base = 60;
+    why = "phrase";
+  } else if (!isIdentifier && tokens.length) {
+    const tokenSet = new Set(
+      tokenize([id, ...aliases, ...topics, ...answers, code, description].join(" ")),
+    );
+    let matched = 0;
+    for (const token of tokens) if (tokenSet.has(token)) matched += 1;
+    if (matched === tokens.length) {
+      base = 40 + 5 * matched;
+      why = "tokens";
+    } else if (matched > 0) {
+      base = 10;
+      why = "partial";
     }
-    if (matches.length >= 20) break;
   }
 
-  if (!matches.length) {
-    process.stdout.write(`No memory found for "${query}".\n`);
-    return 0;
-  }
+  if (base === 0) return { score: 0, why: null, base: 0 };
 
-  const hops = Math.min(Math.max(Number.parseInt(args.hops || "1", 10) || 1, 1), 2);
-  const byId = new Map(nodes.map((node) => [node["@id"], node]));
-  const related = [];
-  const relatedSeen = new Set(matches.map((node) => node["@id"]));
-  let frontier = [...matches];
+  let score = base;
+  const active = entry.snapshot === null;
+  const project = entry.scope === "project";
+  const lastClosed = entry.snapshot !== null && entry.snapshot === rankCtx.lastClosedSnapshot;
+  if (active) score += 20;
+  if (project) score += 15;
+  if (lastClosed) score += 10;
+  if (entry.supersededBy) score -= 50;
+
+  return { score, why, base };
+}
+
+/**
+ * Collect the ids of nodes reachable within `hops` hops from `seedIds`, following
+ * forward and reverse relations over the compact index (no hydration). The reverse
+ * pass uses the precomputed `incomingRelations` map so it is O(degree), not O(nodes).
+ */
+function collectRelatedIds(incomingRelations, nodesById, resolveId, seedIds, hops, relatedSeen, relatedIds) {
+  let frontier = [...seedIds];
   for (let hop = 0; hop < hops; hop += 1) {
     const next = [];
-    for (const node of frontier) {
-      for (const relation of node.relations || []) {
-        const target = byId.get(relation.target);
-        if (target && !relatedSeen.has(target["@id"])) {
-          relatedSeen.add(target["@id"]);
-          related.push(target);
-          next.push(target);
+    for (const nodeId of frontier) {
+      const entry = nodesById.get(nodeId);
+      for (const relation of entry?.relations || []) {
+        const targetId = resolveId(relation.target);
+        if (targetId && !relatedSeen.has(targetId)) {
+          relatedSeen.add(targetId);
+          relatedIds.push(targetId);
+          next.push(targetId);
         }
       }
-      for (const other of nodes) {
-        for (const relation of other.relations || []) {
-          if (relation.target === node["@id"] && !relatedSeen.has(other["@id"])) {
-            relatedSeen.add(other["@id"]);
-            related.push(other);
-            next.push(other);
-          }
+      for (const sourceId of incomingRelations[nodeId] || []) {
+        if (!relatedSeen.has(sourceId)) {
+          relatedSeen.add(sourceId);
+          relatedIds.push(sourceId);
+          next.push(sourceId);
         }
       }
     }
     frontier = next;
   }
+}
 
-  if (args.json) {
-    process.stdout.write(`${formatJson({ query, matches, related })}\n`);
+function renderSummaryLine(entry, score, why) {
+  const type = entry.type ? String(entry.type).replace(/^orchid:/, "") : "memory";
+  const aliases = (entry.aliases || []).length ? ` [${entry.aliases.join(", ")}]` : "";
+  const description = String(entry.description || "").slice(0, 120);
+  const scorePart = score != null ? ` (${why || "match"}, ${score})` : ` (${why || "related"})`;
+  return `- ${type}${aliases} ${entry.id} — ${description}${scorePart}`;
+}
+
+function applyBudget(query, matches, related, dependencies, unresolved, budget) {
+  if (!Number.isInteger(budget) || budget <= 0) return matches;
+  let result = matches;
+  // Drop the lowest-ranked matches until the whole serialized payload fits, always
+  // keeping at least one match. related/dependencies/unresolved are not ranked and
+  // are kept; when they alone exceed the budget the limit is best-effort.
+  while (result.length > 1) {
+    const size = Buffer.byteLength(
+      formatJson({ query, matches: result, dependencies, related, unresolved }),
+    );
+    if (size <= budget) break;
+    result = result.slice(0, -1);
+  }
+  return result;
+}
+
+function renderNode(node, resolveRef) {
+  const lines = [`## ${node["@id"]} — ${node["@type"] || "memory"}`, "", node.description || ""];
+  if (node.artifact) lines.push("", `- artifact: \`${node.artifact}\``);
+  if (node.codeAnchor) lines.push(`- code: \`${node.codeAnchor}\``);
+  if (node.topics && node.topics.length) lines.push(`- topics: ${node.topics.join(", ")}`);
+  if (node.answers && node.answers.length) {
+    lines.push(`- answers: ${node.answers.map((q) => `"${q}"`).join("; ")}`);
+  }
+  for (const relation of node.relations || []) {
+    const target = resolveRef(relation.target);
+    lines.push(`- ${relation.predicate} → ${relation.target}${target ? ` (${target.description})` : ""}`);
+  }
+  return lines.join("\n");
+}
+
+function renderDependency(row, resolveRef) {
+  const contract = row.Version ? `${row.Contract} ${row.Version}` : row.Contract;
+  const lines = [`## ${row.ID} — dependency`, ""];
+  lines.push(`- kind: ${row.Kind || ""}`);
+  lines.push(`- consumer: ${row.Consumer || ""}`);
+  lines.push(`- provider: ${row.Provider || ""}`);
+  lines.push(`- contract: ${contract || ""}`);
+  lines.push(`- status: ${row.Status || ""}`);
+  if (row["Last verified"]) lines.push(`- last verified: ${row["Last verified"]}`);
+  const related = parseRelatedIds(row.Related).map((ref) => {
+    const node = resolveRef(ref);
+    return node ? `${ref} (${node.description})` : ref;
+  });
+  if (related.length) lines.push(`- related: ${related.join(", ")}`);
+  return lines.join("\n");
+}
+
+export function recall(root, args) {
+  const { config, state } = context(root);
+
+  const query = String(args.query || "").trim();
+  if (!query) throw new OrchidError("recall requires a uuid, topic, question, or path");
+  const queryLower = normalizeRef(query);
+  const tokens = tokenize(query);
+  const isIdentifier = IDENTIFIER_QUERY_RE.test(queryLower);
+  const rawLimit = Number.parseInt(String(args.limit ?? ""), 10);
+  const limit = Number.isInteger(rawLimit)
+    ? Math.min(Math.max(rawLimit, 1), MAX_LIMIT)
+    : DEFAULT_LIMIT;
+
+  const historyMode = String(args.history || "recent");
+  if (!HISTORY_MODES.has(historyMode)) {
+    throw new OrchidError(`--history must be one of: ${[...HISTORY_MODES].join(", ")}`);
+  }
+  const includeSuperseded = args.includeSuperseded === true;
+  const summaryMode = args.summary === true && !args.full;
+  const budget = Number.parseInt(String(args.budget ?? ""), 10);
+
+  const ledger = readLedger(root, config);
+  if (ledger.errors.length) {
+    throw new OrchidError(
+      `invalid cross-repo dependency ledger (.orchid/cross-repo-dependencies.md):\n${formatLedgerErrors(ledger)}`,
+    );
+  }
+
+  // Load the manifest and the generated recall index exactly once (rebuilding the
+  // index lazily only when it is missing or stale).
+  const manifest = loadManifest(root, config);
+  const index = loadRecallIndexFresh(root, config, state);
+
+  const nodesById = new Map(index.nodes.map((entry) => [entry.id, entry]));
+  const nodesByNormId = new Map(index.nodes.map((entry) => [normalizeRef(entry.id), entry.id]));
+
+  const snapshotRank = new Map();
+  index.history.forEach((entry, i) => snapshotRank.set(entry.snapshot, i));
+  const rankCtx = {
+    snapshotRank,
+    lastClosedSnapshot: index.history.length ? index.history[index.history.length - 1].snapshot : null,
+  };
+
+  const activeById = new Map((manifest.nodes || []).map((node) => [node["@id"], node]));
+  const snapshotCache = new Map();
+  let hydratedSnapshots = 0;
+  let hydratedNodes = 0;
+  function hydrate(id) {
+    if (activeById.has(id)) return activeById.get(id);
+    const entry = nodesById.get(id);
+    if (!entry || !entry.snapshot) return null;
+    if (!snapshotCache.has(entry.snapshot)) {
+      hydratedSnapshots += 1;
+      const file = path.join(paths(root, config).knowledge, entry.snapshot);
+      let byId = new Map();
+      try {
+        byId = new Map(
+          (JSON.parse(fs.readFileSync(file, "utf8")).nodes || []).map((node) => [node["@id"], node]),
+        );
+      } catch {
+        byId = new Map();
+      }
+      snapshotCache.set(entry.snapshot, byId);
+    }
+    const node = snapshotCache.get(entry.snapshot).get(id);
+    if (node) hydratedNodes += 1;
+    return node || null;
+  }
+
+  function reportStats() {
+    if (process.env.ORCHID_RECALL_STATS === "1") {
+      process.stderr.write(
+        `recall-stats snapshots=${hydratedSnapshots} nodes=${hydratedNodes}\n`,
+      );
+    }
+  }
+
+  const snapshotIteration = (snapshot) => {
+    const match = /^iterations\/([^/]+)\//.exec(snapshot || "");
+    return match ? match[1] : null;
+  };
+
+  function pickMostRecent(ids) {
+    let best = null;
+    let bestRank = -Infinity;
+    let bestCreated = "";
+    let bestId = "";
+    for (const id of ids) {
+      const entry = nodesById.get(id);
+      if (!entry) continue;
+      const rank =
+        entry.snapshot === null ? snapshotRank.size : (snapshotRank.get(entry.snapshot) ?? -1);
+      const created = entry.createdAt || "";
+      if (
+        rank > bestRank ||
+        (rank === bestRank && (created > bestCreated || (created === bestCreated && id > bestId)))
+      ) {
+        best = id;
+        bestRank = rank;
+        bestCreated = created;
+        bestId = id;
+      }
+    }
+    return best;
+  }
+
+  function resolveId(target) {
+    if (!target) return null;
+    const raw = String(target);
+    const key = normalizeRef(raw);
+    const exactId = nodesByNormId.get(key) || (nodesById.has(raw) ? raw : null);
+    if (exactId) return exactId;
+
+    const at = raw.indexOf("@");
+    if (at > 0) {
+      const alias = raw.slice(0, at).toLowerCase();
+      const iteration = raw.slice(at + 1);
+      for (const id of index.aliasesIndex[alias] || []) {
+        const entry = nodesById.get(id);
+        if (entry && (entry.iteration === iteration || snapshotIteration(entry.snapshot) === iteration)) {
+          return id;
+        }
+      }
+      return null;
+    }
+
+    return pickMostRecent(index.aliasesIndex[key] || []);
+  }
+
+  // Exact id/alias/UUID lookups bypass the history window and search all history.
+  const isExactRef =
+    nodesByNormId.has(queryLower) ||
+    Boolean(index.aliasesIndex[queryLower] && index.aliasesIndex[queryLower].length);
+  const searchAll = isIdentifier || isExactRef || historyMode === "all";
+
+  const allowedSnapshots = new Set();
+  if (args.iteration) {
+    for (const entry of index.history) {
+      if (entry.iteration === args.iteration) allowedSnapshots.add(entry.snapshot);
+    }
+  } else if (historyMode === "recent") {
+    for (const entry of index.history.slice(-RECENT_HISTORY_WINDOW)) {
+      allowedSnapshots.add(entry.snapshot);
+    }
+  }
+
+  function inScope(entry) {
+    if (searchAll) return true;
+    if (entry.snapshot === null) return true;
+    return allowedSnapshots.has(entry.snapshot);
+  }
+
+  // Union of exact + token postings; never an exclusive shortlist.
+  const candidateIds = new Set();
+  const add = (list) => {
+    if (list) for (const id of list) candidateIds.add(id);
+  };
+  const exactId = nodesByNormId.get(queryLower);
+  if (exactId) candidateIds.add(exactId);
+  add(index.aliasesIndex[queryLower]);
+  add(index.topicsIndex[queryLower]);
+  add(index.questionsIndex[queryLower]);
+  add(index.codeAnchorsIndex[queryLower]);
+  // Identifier queries resolve exact maps only; the token postings would only add
+  // candidates that rankNode then discards.
+  if (!isIdentifier) {
+    for (const token of tokens) add(index.terms[token]);
+  }
+
+  const matched = [];
+  for (const id of candidateIds) {
+    const entry = nodesById.get(id);
+    if (!entry) continue;
+    if (!inScope(entry)) continue;
+    if (args.repo && entry.repo !== args.repo) continue;
+    if (!includeSuperseded && entry.supersededBy) continue;
+    const { score, why, base } = rankNode(entry, queryLower, tokens, isIdentifier, rankCtx);
+    if (base > 0) matched.push({ score, why, node: entry });
+  }
+  sortNodes(matched);
+
+  const matchedDeps = [];
+  for (const row of ledger.rows) {
+    if (args.repo && !dependencyRepos(row).includes(String(args.repo).toLowerCase())) continue;
+    const score = scoreDependency(row, queryLower, tokens, isIdentifier);
+    if (score > 0) matchedDeps.push({ score, row });
+  }
+  sortDependencies(matchedDeps);
+
+  const topEntries = matched.slice(0, limit);
+  const dependencies = matchedDeps.slice(0, limit).map((item) => item.row);
+
+  if (!topEntries.length && !dependencies.length) {
+    if (args.json) {
+      process.stdout.write(
+        `${formatJson({ query, matches: [], dependencies: [], related: [], unresolved: [] })}\n`,
+      );
+    } else {
+      process.stdout.write(`No memory found for "${query}".\n`);
+    }
     return 0;
   }
 
-  const render = (node) => {
-    const lines = [`## ${node["@id"]} — ${node["@type"] || "memory"}`, "", node.description || ""];
-    if (node.artifact) lines.push("", `- artifact: \`${node.artifact}\``);
-    if (node.codeAnchor) lines.push(`- code: \`${node.codeAnchor}\``);
-    if (node.topics && node.topics.length) lines.push(`- topics: ${node.topics.join(", ")}`);
-    if (node.answers && node.answers.length) lines.push(`- answers: ${node.answers.map((q) => `"${q}"`).join("; ")}`);
-    for (const relation of node.relations || []) {
-      const target = byId.get(relation.target);
-      lines.push(`- ${relation.predicate} → ${relation.target}${target ? ` (${target.description})` : ""}`);
+  const hops = Math.min(Math.max(Number.parseInt(args.hops || "1", 10) || 1, 1), 2);
+
+  const matchIds = topEntries.map((item) => item.node.id);
+  const relatedIds = [];
+  const relatedSeen = new Set(matchIds);
+  const unresolved = [];
+  const depSeeds = [];
+  for (const row of dependencies) {
+    for (const ref of parseRelatedIds(row.Related)) {
+      const id = resolveId(ref);
+      if (id) {
+        if (!relatedSeen.has(id)) {
+          relatedSeen.add(id);
+          relatedIds.push(id);
+          depSeeds.push(id);
+        }
+      } else {
+        unresolved.push(ref);
+      }
     }
-    return lines.join("\n");
+  }
+
+  collectRelatedIds(index.incomingRelations, nodesById, resolveId, matchIds, hops, relatedSeen, relatedIds);
+  collectRelatedIds(index.incomingRelations, nodesById, resolveId, depSeeds, hops, relatedSeen, relatedIds);
+
+  const resolveEntry = (target) => {
+    const id = resolveId(target);
+    return id ? nodesById.get(id) : null;
+  };
+  const resolveNode = (target) => {
+    const id = resolveId(target);
+    return id ? hydrate(id) : null;
   };
 
+  const matches = topEntries.map((item) =>
+    summaryMode ? summarizeEntry(item.node, item.score, item.why) : hydrate(item.node.id),
+  );
+  const related = relatedIds.map((id) => {
+    const entry = nodesById.get(id);
+    if (!entry) return null;
+    return summaryMode ? summarizeEntry(entry, null, "related") : hydrate(id);
+  });
+
+  const finalMatches =
+    summaryMode && Number.isInteger(budget) && budget > 0
+      ? applyBudget(query, matches, related, dependencies, unresolved, budget)
+      : matches;
+
+  if (args.json) {
+    process.stdout.write(
+      `${formatJson({ query, matches: finalMatches, dependencies, related, unresolved })}\n`,
+    );
+    reportStats();
+    return 0;
+  }
+
   process.stdout.write(`# Recall: ${query}\n\n`);
-  for (const node of matches) process.stdout.write(`${render(node)}\n\n`);
+  if (summaryMode) {
+    for (const item of finalMatches) {
+      const entry = nodesById.get(item.id);
+      process.stdout.write(`${renderSummaryLine(entry, item.score, item.why)}\n`);
+    }
+    for (const row of dependencies) process.stdout.write(`${renderDependency(row, resolveEntry)}\n\n`);
+    if (related.length) {
+      process.stdout.write(`## Related (${hops} hop${hops > 1 ? "s" : ""})\n`);
+      for (const item of related) {
+        const entry = nodesById.get(item.id);
+        process.stdout.write(`${renderSummaryLine(entry, null, "related")}\n`);
+      }
+    }
+    if (unresolved.length) {
+      process.stdout.write(`## Unresolved\n`);
+      for (const ref of unresolved) process.stdout.write(`- ${ref}\n`);
+    }
+    reportStats();
+    return 0;
+  }
+
+  for (const node of matches) {
+    if (node) process.stdout.write(`${renderNode(node, resolveNode)}\n\n`);
+  }
+  for (const row of dependencies) process.stdout.write(`${renderDependency(row, resolveNode)}\n\n`);
   if (related.length) {
     process.stdout.write(`## Related (${hops} hop${hops > 1 ? "s" : ""})\n\n`);
-    for (const node of related) process.stdout.write(`${render(node)}\n\n`);
+    for (const node of related) {
+      if (node) process.stdout.write(`${renderNode(node, resolveNode)}\n\n`);
+    }
   }
+  if (unresolved.length) {
+    process.stdout.write(`## Unresolved\n\n`);
+    for (const ref of unresolved) process.stdout.write(`- ${ref}\n`);
+  }
+  reportStats();
   return 0;
 }
 
