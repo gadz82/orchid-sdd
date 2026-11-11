@@ -1,3 +1,15 @@
+# [1.1.0](https://github.com/gadz82/orchid-sdd/compare/v1.0.0...v1.1.0) (2026-11-11)
+
+
+### Bug Fixes
+
+* **wave:** set a deterministic merge identity for CI reconcile ([8d2496e](https://github.com/gadz82/orchid-sdd/commit/8d2496e7d20c975657e36aacc965a1e0e162ae99))
+
+
+### Features
+
+* add parallel waves and state leases ([4ae670e](https://github.com/gadz82/orchid-sdd/commit/4ae670ec756785c8845ac7d57dc64641ee4c5638))
+
 # [1.0.0](https://github.com/gadz82/orchid-sdd/compare/v0.3.4...v1.0.0) (2026-11-07)
 
 
