@@ -14,6 +14,14 @@ import { OrchidError, exists, formatJson, nowIso, readJson, writeJson } from "./
 
 const WAVE_RE = /^(?:W)?([1-9][0-9]*)$/i;
 
+// Merges created by the orchestrator need a deterministic author identity:
+// CI runners have no git user.name/user.email, and `git merge --no-ff` otherwise
+// fails with "unable to auto-detect email address" (masked as a merge conflict).
+const MERGE_IDENTITY = [
+  "-c", "user.name=orchid-sdd",
+  "-c", "user.email=orchid-sdd@users.noreply.github.com",
+];
+
 function git(cwd, args, { allowFailure = false } = {}) {
   const result = spawnSync("git", ["-C", cwd, ...args], {
     encoding: "utf8",
@@ -821,12 +829,16 @@ function reconcileWave(root, config, state, number, args) {
         branch,
         tip,
       });
-      const merge = git(repoDir, ["merge", "--no-ff", "--no-edit", branch], { allowFailure: true });
+      const merge = git(repoDir, [...MERGE_IDENTITY, "merge", "--no-ff", "--no-edit", branch], {
+        allowFailure: true,
+      });
       if (merge.code !== 0) {
         git(repoDir, ["merge", "--abort"], { allowFailure: true });
         entry.merging = false;
+        const detail = merge.err || merge.out || "unknown merge error";
         throw new OrchidError(
-          `merge conflict for ${entry.id} (${branch}); merge ${branch} into ${repoDir} manually, ` +
+          `merge conflict for ${entry.id} (${branch}): ${detail}; ` +
+            `merge ${branch} into ${repoDir} manually, ` +
             `then rerun \`orchid-sdd wave reconcile ${wave.number}\``,
         );
       }
