@@ -8,7 +8,8 @@ import {
 } from "./models.mjs";
 import { paths, readState, appendEvent, writeProjection } from "./store.mjs";
 import { captureWorkspaceState } from "./workspace.mjs";
-import { OrchidError, ensureDir, exists, formatJson, nowIso, uuid7 } from "./util.mjs";
+import { withStateLock } from "./lock.mjs";
+import { OrchidError, ensureDir, exists, formatJson, nowIso, uuid7, writeJson } from "./util.mjs";
 
 function requireActive(state) {
   if (!state.activeIteration) {
@@ -43,7 +44,13 @@ export function findHandoff(root, config, state, id = "latest") {
   return rows.find(({ data }) => data.id === id) || null;
 }
 
-export function acceptHandoff(root, config, state, found, { currentAgent, currentModel } = {}) {
+export function acceptHandoff(
+  root,
+  config,
+  state,
+  found,
+  { currentAgent, currentModel, locked } = {},
+) {
   const id = found.data.id;
   state.lastHandoff = id;
   appendEvent(root, config, state, {
@@ -54,7 +61,7 @@ export function acceptHandoff(root, config, state, found, { currentAgent, curren
       current: detectCurrentIdentity({ agent: currentAgent, model: currentModel }),
       acceptedAt: nowIso(),
     },
-  });
+  }, { locked: Boolean(locked) });
   return id;
 }
 
@@ -69,10 +76,18 @@ function routeFor(root, config, state) {
 }
 
 export function handoffCommand(root, args = {}) {
+  const action = String(args.action || "list");
+  const mutating = action === "prepare" || action === "accept";
+  if (mutating && !args.__locked) {
+    return withStateLock(
+      root,
+      () => handoffCommand(root, { ...args, __locked: true }),
+      { purpose: `handoff ${action}`, ttlMs: 120000 },
+    );
+  }
   const { config } = loadConfig(root);
   const state = readState(root);
   requireActive(state);
-  const action = String(args.action || "list");
 
   if (action === "list") {
     const rows = listHandoffs(root, config, state).map(({ file, data }) => ({
@@ -134,13 +149,16 @@ export function handoffCommand(root, args = {}) {
       run: state.currentRun || null,
       prompts: state.prompts || {},
       runs: state.runs || {},
+      activePrompts: state.activePrompts || {},
+      currentWave: state.currentWave || null,
+      currentWaves: state.currentWaves || {},
       lastEvent: state.lastEvent || null,
       routing,
       workspace: captureWorkspaceState(root, config),
       reason: args.reason ? String(args.reason) : "manual handoff",
       createdAt: nowIso(),
     };
-    fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, "utf8");
+    writeJson(file, data);
     state.lastHandoff = id;
     appendEvent(root, config, state, {
       type: "handoff.created",
@@ -159,7 +177,7 @@ export function handoffCommand(root, args = {}) {
           current: routing.current,
         },
       },
-    });
+    }, { locked: Boolean(args.__locked) });
     writeProjection(root, config, state);
     if (args.json) {
       process.stdout.write(`${formatJson(data)}\n`);
@@ -180,6 +198,7 @@ export function handoffCommand(root, args = {}) {
     acceptHandoff(root, config, state, found, {
       currentAgent: args.currentAgent,
       currentModel: args.currentModel,
+      locked: Boolean(args.__locked),
     });
     writeProjection(root, config, state);
     if (args.json) {

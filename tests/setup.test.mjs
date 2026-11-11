@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import { ROOT, TITLE, cli, setup, start, tmp } from "./helpers.mjs";
+import { ROOT, TITLE, cli, git, initRepo, setup, start, tmp } from "./helpers.mjs";
 
 test("help and version are explicit and side-effect free", () => {
   const root = tmp();
@@ -46,6 +46,9 @@ test("state schema includes the memory revision cursor", () => {
     fs.readFileSync(path.join(ROOT, ".skill", "schemas", "state.schema.json"), "utf8"),
   );
   assert.deepEqual(schema.properties.memoryEvent.type, ["string", "null"]);
+  assert.ok(schema.properties.activePrompts);
+  assert.ok(schema.properties.currentWaves);
+  assert.ok(schema.properties.currentWave);
 });
 
 test("unknown config keys are rejected", () => {
@@ -115,6 +118,30 @@ test("setup is non-destructive and supports dry-run", () => {
   assert.match(again.all, /already exists/);
   const forced = cli(root, "setup", "--yes", "--profile", "frontend", "--force");
   assert.equal(forced.code, 0, forced.all);
+});
+
+test("start ignores the state lease in projects with an older gitignore", () => {
+  const root = tmp();
+  setup(root);
+  initRepo(root, {}, "init");
+  const gitignore = path.join(root, ".gitignore");
+  fs.writeFileSync(
+    gitignore,
+    fs.readFileSync(gitignore, "utf8").replace(".orchid/locks/\n", ""),
+  );
+  git(root, "add", "-A");
+  git(root, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "-m", "old ignore");
+  const started = cli(root, "start", TITLE);
+  assert.equal(started.code, 0, started.all);
+});
+
+test("setup --force refuses to discard an active iteration", () => {
+  const root = tmp();
+  setup(root);
+  start(root, TITLE);
+  const forced = cli(root, "setup", "--yes", "--profile", "frontend", "--force");
+  assert.equal(forced.code, 1, forced.all);
+  assert.match(forced.all, /active iteration or wave/);
 });
 
 test("doctor --fix creates missing directories", () => {

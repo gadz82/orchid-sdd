@@ -13,6 +13,7 @@ import {
 import { buildRouting, loadPersonas, loadProfile, resolvePersona, validatePersonaRefs } from "./registry.mjs";
 import { loadSteering, validateSteeringRefs } from "./steering.mjs";
 import { newState, paths, readState, writeProjection, writeState } from "./store.mjs";
+import { withStateLock } from "./lock.mjs";
 import { OrchidError, ensureDir, exists, formatJson, readText, writeJson } from "./util.mjs";
 import { detectWorkspaceRepos, findWorkspaceRoot, workspaceConfig, writeRepoFragments } from "./workspace.mjs";
 import { parseFrontMatter } from "./yaml.mjs";
@@ -36,6 +37,8 @@ export function agentsBlock(knowledgeFolder, constitutionFolder = ".orchid/const
 - Before Build, read the Build steering context and follow the project code examples for the language; a deviation requires an ADR.
 - Run \`orchid-sdd route --phase <phase>\` before work; if the current model/agent is unknown or mismatched, tell the user. Never switch automatically.
 - Track development prompts with \`orchid-sdd prompt start|step|complete\`; save a checkpoint with \`orchid-sdd handoff prepare\` before changing harness.
+- For independent prompts use \`orchid-sdd wave start <N>\`, then start up to \`execution.max_parallel\` prompts; finish with \`orchid-sdd wave reconcile <N>\`. Retry reconciliation after fixing a conflict or test. State mutations are leased through \`.orchid/locks/state.lock\`; never bypass a live lease.
+- Run the CLI against the project root (or pass \`--root <root>\`), even while editing inside a prompt worktree; the root owns state, events, knowledge, and the lease.
 - Ask before starting whether to create a feature branch and from which base; record the answer in the TRD. If not, stay on the current branch.
 - Each prompt gets one disposable worktree and temporary branch; remove both immediately after CR and merge. Never leave an \`orchid/<iteration>/<prompt-id>\` branch behind.
 - In workspace mode, record every discovered cross-repo dependency in \`.orchid/cross-repo-dependencies.md\`; cite the \`DEP-###\` row in prompt contracts and CR.
@@ -50,6 +53,7 @@ ${knowledgeFolder}/index/recall.json
 ${knowledgeFolder}/iterations/*/execution/runs/
 ${knowledgeFolder}/iterations/*/plan/prompts/_bus/
 .orchid/worktrees/
+.orchid/locks/
 .orchid-migration-bck/
 ${GITIGNORE_END}
 `;
@@ -299,6 +303,13 @@ export function runSetup(root, skillRoot, options = {}) {
       `this directory is inside workspace "${parentWorkspace}"; run setup from the workspace root`,
     );
   }
+  if (!options.__locked && !options.dryRun) {
+    return withStateLock(
+      root,
+      () => runSetup(root, skillRoot, { ...options, __locked: true }),
+      { purpose: "setup", ttlMs: 120000 },
+    );
+  }
   const profileId = options.profile || detectProfile(root);
   const profile = loadProfile(skillRoot, profileId);
   const catalog = loadPersonas(skillRoot);
@@ -383,6 +394,14 @@ export function runSetup(root, skillRoot, options = {}) {
   });
   const configPath = path.join(root, "orchid-sdd.yml");
   const statePath = path.join(root, ".orchid", "state.json");
+  if (exists(statePath) && options.force) {
+    const current = readState(root);
+    if (current.activeIteration || Object.keys(current.currentWaves || {}).length) {
+      throw new OrchidError(
+        "setup --force would discard an active iteration or wave; close/abandon the iteration first",
+      );
+    }
+  }
 
   const dirs = [
     ".orchid/personas",

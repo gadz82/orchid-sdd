@@ -17,6 +17,9 @@ If the sentinel is missing, refuse and print:
 
 Never infer a command from a general request such as "plan this feature".
 
+Detailed operator reference: `docs/reference/README.md` (CLI, phases, memory,
+personas, steering, configuration, customization, workspace, migration).
+
 # Role: you are the orchestrator
 
 You are the primary agent session. You decide, delegate, verify, and merge.
@@ -85,6 +88,10 @@ Shape the update for the phase:
 | Resolve model/agent | `orchid-sdd route --phase <phase> [--prompt P-003] [--current-agent NAME] [--current-model NAME]` |
 | Track a prompt | `orchid-sdd prompt start P-003 --step implement` / `prompt step` / `prompt complete` |
 | Validate prompt contracts | `orchid-sdd prompt validate [--json]` |
+| Prepare a parallel wave | `orchid-sdd wave start W4` | Create isolated worktrees; prompts stay ready |
+| Inspect a wave | `orchid-sdd wave status [W4]` | Show active prompts and worktrees |
+| Reconcile a wave | `orchid-sdd wave reconcile W4 [--test]` | Merge done branches, clean worktrees, close the wave |
+| Abort a wave | `orchid-sdd wave abort W4` | Remove worktrees/branches and mark the wave failed |
 | Save/resume a handoff | `orchid-sdd handoff prepare` / `orchid-sdd resume` / `handoff list` / `handoff accept <id>` |
 | Convert an existing project/workspace | `orchid-sdd migrate scan\|backup\|init\|status\|finalize` |
 | Validate setup/sources | `orchid-sdd doctor [--ci] [--online] [--fix]` |
@@ -239,15 +246,31 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
 
 ## Phase 5 — Build and adversarial CR
 
-- Select ready prompts. Create one worktree and one temporary branch
-  `orchid/<iteration>/<prompt-id>` per prompt; never reuse a prompt branch.
+- Select ready prompts. In normal single-prompt mode create one worktree and one temporary
+  branch `orchid/<iteration>/<prompt-id>` per prompt; never reuse a prompt branch. For a wave,
+  let `orchid-sdd wave start <N>` create the worktrees from one frozen base. It refuses
+  uncommitted code (state, events, matrix, and runtime paths are ignored) unless
+  `--allow-dirty` is explicit.
 - Run `orchid-sdd route --phase build --prompt <prompt-id>` before execution and alert the user
   on `unknown` or `mismatch`.
 - Read `orchid-sdd steering context --phase build`; follow the project `code-examples` rule for
   the language, cite it in the prompt report, and require an ADR for any deviation.
 - Record the prompt with `orchid-sdd prompt start <prompt-id> --step implement`; advance safe
-  steps with `prompt step`. Finish with `prompt complete|fail|waive` only after tests, CR,
-  merge, and branch cleanup.
+  steps with `prompt step`. Finish with `prompt complete|fail|waive` after tests and CR. In
+  wave mode, completion means the branch is ready for reconciliation; the merge and cleanup
+  are performed by `orchid-sdd wave reconcile <N>`. If reconciliation fails, fix the conflict
+  or test and rerun it: `wave.merged` events make retries skip already merged prompts. Spike
+  prompts use `spike/P-###`; reconciliation copies `assessment/spikes/` findings and discards
+  the spike branch, so spike code is never merged.
+- Run the CLI against the project root (or pass `--root <root>`), even while editing inside a
+  prompt worktree. The root owns state, events, knowledge, and the lease.
+- All state mutations acquire `.orchid/locks/state.lock`. Never run two mutating CLI commands
+  against the same root without the lease; a live lock is an ownership error, while an expired
+  lock is recovered automatically. Nested calls in the same CLI process reuse the lease.
+- Max parallel execution is bounded by `execution.max_parallel`; prompts in a wave must have
+  disjoint write scopes, including against other active waves. Never run a dependent prompt
+  before its `depends_on` prompts are `done` or `waived`, and never start a dependent wave
+  before the wave that produced its dependency has been reconciled.
 - Give each implementer a context pack, not the repository.
 - Keep inline comments why-only; update the anchor and docblock for significant units, with
   history in the docblock.
@@ -263,15 +286,19 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
   and cross-repo regression evidence. A missing row or stale evidence blocks.
 - Fix loop up to `max_fix_loops`; then `escalated`: accept with ADR, split, or revert.
 - Merge to the iteration's feature/integration branch in wave order, or to the current branch
-  when the user chose no feature branch. Do not merge to the default branch during build
-  unless an active repository steering rule explicitly permits direct mainline integration
-  and records the evidence.
+  when the user chose no feature branch. In wave mode `orchid-sdd wave reconcile <N>` performs
+  the deterministic merge, optional wave tests, and cleanup. Do not merge to the default
+  branch during build unless an active repository steering rule explicitly permits direct
+  mainline integration and records the evidence.
 - Immediately after CR passes and the merge lands, remove the prompt worktree
   (`git worktree remove <path>`) and delete its temporary branch
   (`git branch -D orchid/<iteration>/<prompt-id>`). This is mandatory: a prompt is not done
-  while its worktree or branch still exists. Clean up failed and waived prompts the same way.
+  while its worktree or branch still exists. In wave mode the reconciliation command owns
+  this cleanup; a wave is not closed while any worktree or branch remains.
 - A prompt is done only when acceptance, tests, CR, anchors/docblocks, branch cleanup, and the
-  matrix agree.
+  matrix agree. A wave is done only after reconciliation, wave-level tests when requested, and
+  branch/worktree cleanup. G5 is refused while a wave is active or a prompt branch/worktree
+  remains; reconcile or abort the wave first.
 
 ## Phase 6 — Logic review (PM)
 

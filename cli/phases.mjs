@@ -34,6 +34,8 @@ import {
 } from "./steering.mjs";
 import { detectCurrentIdentity, evaluateRoute, resolveRoute } from "./models.mjs";
 import { acceptHandoff, findHandoff } from "./handoff.mjs";
+import { withStateLock } from "./lock.mjs";
+import { assertNoPromptArtifacts } from "./waves.mjs";
 
 function context(root) {
   const loaded = loadConfig(root);
@@ -96,7 +98,7 @@ function nextAction(phase) {
     discovery: "Apply steering, capture discovery/Gherkin/questionnaires, write discovery/steering.md; then `orchid-sdd gate pass G2 --evidence discovery/gherkin`.",
     assessment: "Run the impact lenses and negotiation; then `orchid-sdd gate pass G3 --evidence assessment/negotiation.md`.",
     planning: "Generate the prompt DAG and cost estimate; then `orchid-sdd gate pass G4 --evidence plan/plan.json`.",
-    build: "Execute ready prompts with `orchid-sdd build --all`; then `orchid-sdd gate pass G5 --note \"all prompts reviewed\"`.",
+    build: "Prepare a wave with `orchid-sdd wave start <N>`; start up to max_parallel prompts, then `orchid-sdd wave reconcile <N> --test`; finally `orchid-sdd gate pass G5 --note \"all prompts reviewed\"`.",
     logic_review: "Verify scenarios and steering, write reviews/logic-review.md and reviews/steering-review.md; ask the human \"Approve the changes and move forward.\" Then `orchid-sdd gate pass G6 --evidence reviews/logic-review.md`.",
     closed: "Ask \"Do you want to start the technical handover?\" If yes, run `orchid-sdd handover`, then `orchid-sdd handover --approve`.",
     handover: "Iteration complete.",
@@ -109,6 +111,13 @@ function nextAction(phase) {
 }
 
 export function start(root, args) {
+  if (!args.__locked) {
+    return withStateLock(
+      root,
+      () => start(root, { ...args, __locked: true }),
+      { purpose: "start iteration", ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   if (state.activeIteration) {
     throw new OrchidError(`iteration "${state.activeIteration}" is already active; close or abandon it first`);
@@ -155,6 +164,17 @@ export function start(root, args) {
   state.iterationTitle = title;
   state.iterationRigor = rigor;
   state.phase = "intent";
+  // Prompt IDs are iteration-local. Keeping the previous iteration's prompt
+  // map makes attempt counters and prompt list lie about the new iteration.
+  state.prompts = {};
+  state.runs = {};
+  state.activePrompts = {};
+  state.currentPrompt = null;
+  state.currentRun = null;
+  state.currentWave = null;
+  state.currentWaves = {};
+  state.lastWave = null;
+  state.lastHandoff = null;
   state.gates = Object.fromEntries(
     Object.keys(state.gates).map((gate) => [gate, gate === "G0" ? state.gates.G0 || "passed" : "pending"]),
   );
@@ -163,7 +183,7 @@ export function start(root, args) {
     type: "iteration.started",
     subject: `urn:orchid:iteration:${iteration}`,
     payload: { id: iteration, title, rigor, technicalOnly, startedAt: timestamp },
-  });
+  }, { locked: true });
   writeProjection(root, config, state);
 
   if (args.json) {
@@ -177,6 +197,13 @@ export function start(root, args) {
 }
 
 export function gate(root, args) {
+  if (args.action !== "status" && !args.__locked) {
+    return withStateLock(
+      root,
+      () => gate(root, { ...args, __locked: true }),
+      { purpose: `gate ${args.action || ""} ${args.gate || ""}`, ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   requireActive(state);
   const action = String(args.action || "status").toLowerCase();
@@ -189,6 +216,22 @@ export function gate(root, args) {
   const name = String(args.gate || "").toUpperCase();
   if (!/^G[0-8]$/.test(name)) throw new OrchidError("gate must be one of G0..G8");
   if (!["pass", "fail"].includes(action)) throw new OrchidError("gate action must be pass, fail, or status");
+  if (name === "G5" && action === "pass") {
+    const waves = Object.values(state.currentWaves || {});
+    if (waves.length) {
+      throw new OrchidError(
+        `wave ${waves[0].id} is still active; run wave reconcile or wave abort before G5`,
+      );
+    }
+    assertNoPromptArtifacts(root, config, state);
+    const iteration = path.join(paths(root, config).iterations, state.activeIteration);
+    const open = openPrompts(iteration);
+    if (open.length) {
+      throw new OrchidError(
+        `prompts are not done: ${open.map((prompt) => `${prompt.id}:${prompt.status}`).join(", ")}; finish or waive them before G5`,
+      );
+    }
+  }
   const evidence = args.evidence ? String(args.evidence) : null;
   if (!evidence && !args.note) {
     throw new OrchidError("gate pass/fail requires --evidence <path> or --note \"...\"");
@@ -213,7 +256,7 @@ export function gate(root, args) {
       steering: steering.rules.map((rule) => rule.id),
       steeringArtifact: steering.rules.length ? steeringArtifact(state.phase) : null,
     },
-  });
+  }, { locked: Boolean(args.__locked) });
   writeProjection(root, config, state);
   process.stdout.write(`Gate ${name} ${state.gates[name]}\n`);
   return 0;
@@ -228,6 +271,13 @@ const PHASES = {
 };
 
 export function phaseCommand(root, args, name) {
+  if (!args.__locked) {
+    return withStateLock(
+      root,
+      () => phaseCommand(root, { ...args, __locked: true }, name),
+      { purpose: `phase ${name}`, ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   requireActive(state);
   const spec = PHASES[name];
@@ -244,6 +294,12 @@ export function phaseCommand(root, args, name) {
   }
 
   if (name === "review" && !args.force) {
+    const waves = Object.values(state.currentWaves || {});
+    if (waves.length) {
+      throw new OrchidError(
+        `wave ${waves[0].id} is still active; run wave reconcile or wave abort before review`,
+      );
+    }
     const matrixFile = path.join(iteration, "plan", "matrix.json");
     if (exists(matrixFile)) {
       try {
@@ -258,6 +314,7 @@ export function phaseCommand(root, args, name) {
         throw new OrchidError(`cannot read plan/matrix.json: ${error.message}`);
       }
     }
+    assertNoPromptArtifacts(root, config, state);
   }
 
   if (name === "handover" && !args.force) {
@@ -285,7 +342,7 @@ export function phaseCommand(root, args, name) {
         status: routing.status,
       },
     },
-  });
+  }, { locked: Boolean(args.__locked) });
   writeProjection(root, config, state);
 
   if (args.json) {
@@ -323,12 +380,21 @@ export function phaseCommand(root, args, name) {
   return 0;
 }
 
-function assertPromptsDone(iteration, force) {
+function openPrompts(iteration) {
   const matrixFile = path.join(iteration, "plan", "matrix.json");
-  if (!exists(matrixFile)) return;
-  const matrix = JSON.parse(fs.readFileSync(matrixFile, "utf8"));
+  if (!exists(matrixFile)) return [];
+  let matrix;
+  try {
+    matrix = JSON.parse(fs.readFileSync(matrixFile, "utf8"));
+  } catch (error) {
+    throw new OrchidError(`cannot read plan/matrix.json: ${error.message}`);
+  }
   const prompts = Array.isArray(matrix) ? matrix : matrix.prompts || [];
-  const open = prompts.filter((prompt) => !["done", "waived"].includes(prompt.status));
+  return prompts.filter((prompt) => !["done", "waived"].includes(prompt.status));
+}
+
+function assertPromptsDone(iteration, force) {
+  const open = openPrompts(iteration);
   if (open.length && !force) {
     throw new OrchidError(
       `prompts are not done: ${open.map((prompt) => `${prompt.id}:${prompt.status}`).join(", ")}; pass --force to close anyway`,
@@ -337,8 +403,20 @@ function assertPromptsDone(iteration, force) {
 }
 
 export function close(root, args) {
+  if (!args.__locked) {
+    return withStateLock(
+      root,
+      () => close(root, { ...args, __locked: true }),
+      { purpose: "close iteration", ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   requireActive(state);
+  if (Object.keys(state.currentWaves || {}).length || state.currentWave) {
+    const id = state.currentWave?.id || Object.keys(state.currentWaves || {})[0];
+    throw new OrchidError(`wave ${id} is still active; run wave reconcile or wave abort first`);
+  }
+  assertNoPromptArtifacts(root, config, state, { force: Boolean(args.force) });
   if (state.gates.G6 !== "passed") {
     throw new OrchidError("gate G6 (logic review) must be passed before closure");
   }
@@ -358,7 +436,7 @@ export function close(root, args) {
     type: "iteration.closed",
     subject: `urn:orchid:iteration:${id}`,
     payload: { id, status: "closed", closedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") },
-  });
+  }, { locked: Boolean(args.__locked) });
   state.activeIteration = null;
   state.lastIteration = id;
   writeState(root, state);
@@ -374,8 +452,19 @@ export function close(root, args) {
 }
 
 export function abandon(root, args) {
+  if (!args.__locked) {
+    return withStateLock(
+      root,
+      () => abandon(root, { ...args, __locked: true }),
+      { purpose: "abandon iteration", ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   requireActive(state);
+  if (Object.keys(state.currentWaves || {}).length || state.currentWave) {
+    const id = state.currentWave?.id || Object.keys(state.currentWaves || {})[0];
+    throw new OrchidError(`wave ${id} is still active; run wave abort first`);
+  }
   const reason = String(args.reason || "").trim();
   if (!reason) throw new OrchidError("abandon requires a reason: orchid-sdd abandon \"<reason>\"");
   const id = state.activeIteration;
@@ -386,7 +475,7 @@ export function abandon(root, args) {
     type: "iteration.abandoned",
     subject: `urn:orchid:iteration:${id}`,
     payload: { id, status: "abandoned", reason, closedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") },
-  });
+  }, { locked: Boolean(args.__locked) });
   state.activeIteration = null;
   state.lastIteration = id;
   state.phase = "abandoned";
@@ -402,9 +491,20 @@ export function abandon(root, args) {
 }
 
 export function handover(root, args) {
+  if (!args.__locked) {
+    return withStateLock(
+      root,
+      () => handover(root, { ...args, __locked: true }),
+      { purpose: "handover", ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   if (state.activeIteration) {
     throw new OrchidError("close the iteration before handover");
+  }
+  if (Object.keys(state.currentWaves || {}).length || state.currentWave) {
+    const id = state.currentWave?.id || Object.keys(state.currentWaves || {})[0];
+    throw new OrchidError(`wave ${id} is still active; run wave reconcile or wave abort first`);
   }
   if (!["closed", "complete", "handover"].includes(state.phase)) {
     throw new OrchidError("handover requires a closed iteration");
@@ -425,7 +525,7 @@ export function handover(root, args) {
       type: "phase.changed",
       subject: `phase:handover`,
       payload: { phase: "handover", iteration: id },
-    });
+    }, { locked: Boolean(args.__locked) });
     state.activeIteration = null;
     state.lastIteration = id;
     writeState(root, state);
@@ -441,7 +541,7 @@ export function handover(root, args) {
     type: "handover.accepted",
     subject: `urn:orchid:iteration:${id}`,
     payload: { id, approvedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z") },
-  });
+  }, { locked: Boolean(args.__locked) });
   state.activeIteration = null;
   state.lastIteration = id;
   state.phase = "complete";
@@ -456,6 +556,13 @@ export function handover(root, args) {
 }
 
 export function resume(root, args) {
+  if (!args.__locked) {
+    return withStateLock(
+      root,
+      () => resume(root, { ...args, __locked: true }),
+      { purpose: "resume from events", ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   const events = readEvents(root, config);
   if (!events.length) {
@@ -470,8 +577,12 @@ export function resume(root, args) {
   let lastMemory = null;
   let prompts = {};
   let runs = {};
+  let activePrompts = {};
   let currentPrompt = null;
   let currentRun = null;
+  let currentWave = null;
+  let currentWaves = {};
+  let lastWave = state.lastWave || null;
   let lastHandoff = null;
   const acceptedHandoffs = new Set();
   const gates = Object.fromEntries(Object.keys(state.gates).map((gate) => [gate, "pending"]));
@@ -486,8 +597,12 @@ export function resume(root, args) {
       title = payload.title || null;
       prompts = {};
       runs = {};
+      activePrompts = {};
       currentPrompt = null;
       currentRun = null;
+      currentWave = null;
+      currentWaves = {};
+      lastWave = null;
       lastHandoff = null;
       for (const gate of Object.keys(gates)) gates[gate] = "pending";
       gates.G0 = "passed";
@@ -507,6 +622,7 @@ export function resume(root, args) {
     } else if (event.type === "prompt.started" && payload.prompt && payload.run) {
       prompts[payload.prompt.id] = { ...payload.prompt };
       runs[payload.run.id] = { ...payload.run };
+      activePrompts[payload.prompt.id] = payload.run.id;
       currentPrompt = payload.prompt.id;
       currentRun = payload.run.id;
     } else if (event.type === "prompt.step" && payload.prompt) {
@@ -520,10 +636,85 @@ export function resume(root, args) {
       if (payload.run && runs[payload.run]) {
         runs[payload.run].status = payload.status;
       }
+      delete activePrompts[payload.prompt];
       if (currentPrompt === payload.prompt) {
-        currentPrompt = null;
-        currentRun = null;
+        const remaining = Object.keys(activePrompts);
+        currentPrompt = remaining.length ? remaining[remaining.length - 1] : null;
+        currentRun = currentPrompt ? activePrompts[currentPrompt] : null;
       }
+    } else if (event.type === "wave.started" && payload.wave) {
+      currentWaves[payload.wave.id] = { ...payload.wave };
+      currentWave = currentWaves[payload.wave.id];
+    } else if (event.type === "wave.retried" && payload.wave) {
+      currentWaves[payload.wave.id] = {
+        ...(currentWaves[payload.wave.id] || {}),
+        ...payload.wave,
+        status: "running",
+      };
+      currentWave = currentWaves[payload.wave.id];
+    } else if (event.type === "wave.merging" && payload.waveId) {
+      const entry = (currentWaves[payload.waveId]?.prompts || []).find(
+        (prompt) => prompt.id === payload.promptId,
+      );
+      if (entry) {
+        entry.branchTip = payload.tip || entry.branchTip || null;
+        entry.merging = true;
+      }
+    } else if (event.type === "wave.spike_copied" && payload.waveId) {
+      const entry = (currentWaves[payload.waveId]?.prompts || []).find(
+        (prompt) => prompt.id === payload.promptId,
+      );
+      if (entry) entry.spikeCopied = true;
+    } else if (event.type === "wave.merged" && payload.waveId) {
+      const entry = (currentWaves[payload.waveId]?.prompts || []).find(
+        (prompt) => prompt.id === payload.promptId,
+      );
+      if (entry) {
+        entry.merged = true;
+        entry.merging = false;
+        entry.mergedAt = event.ts;
+        if (payload.tip) entry.branchTip = payload.tip;
+        if (payload.waived) entry.waived = true;
+        if (payload.spike) entry.spike = true;
+      }
+    } else if (event.type === "wave.reconciled" && payload.wave) {
+      delete currentWaves[payload.wave.id];
+      lastWave = { ...payload.wave, status: "done" };
+      const reconciledIds = new Set((payload.wave.prompts || []).map((prompt) => prompt.id));
+      for (const promptId of reconciledIds) delete activePrompts[promptId];
+      if (currentPrompt && reconciledIds.has(currentPrompt)) {
+        const remainingPrompts = Object.keys(activePrompts);
+        currentPrompt = remainingPrompts.length ? remainingPrompts[remainingPrompts.length - 1] : null;
+        currentRun = currentPrompt ? activePrompts[currentPrompt] : null;
+      }
+      const remaining = Object.values(currentWaves);
+      currentWave = remaining.length ? remaining[remaining.length - 1] : null;
+    } else if (event.type === "wave.failed" && payload.wave) {
+      currentWaves[payload.wave.id] = {
+        ...(currentWaves[payload.wave.id] || {}),
+        ...payload.wave,
+        status: "failed",
+      };
+      currentWave = currentWaves[payload.wave.id];
+      lastWave = currentWaves[payload.wave.id];
+    } else if (event.type === "wave.aborted" && payload.wave) {
+      delete currentWaves[payload.wave.id];
+      lastWave = { ...payload.wave, status: "aborted" };
+      for (const [promptId, status] of Object.entries(payload.promptStatuses || {})) {
+        if (prompts[promptId]) prompts[promptId].status = status;
+        delete activePrompts[promptId];
+      }
+      for (const [runId, status] of Object.entries(payload.runStatuses || {})) {
+        if (runs[runId]) {
+          runs[runId].status = status;
+          runs[runId].completedAt = event.ts;
+        }
+      }
+      const remainingPrompts = Object.keys(activePrompts);
+      currentPrompt = remainingPrompts.length ? remainingPrompts[remainingPrompts.length - 1] : null;
+      currentRun = currentPrompt ? activePrompts[currentPrompt] : null;
+      const remaining = Object.values(currentWaves);
+      currentWave = remaining.length ? remaining[remaining.length - 1] : null;
     } else if (event.type === "handoff.created" && payload.id) {
       lastHandoff = payload.id;
     } else if (event.type === "handoff.accepted" && payload.id) {
@@ -535,8 +726,12 @@ export function resume(root, args) {
   state.activeIteration = active;
   state.prompts = prompts;
   state.runs = runs;
+  state.activePrompts = activePrompts;
   state.currentPrompt = currentPrompt;
   state.currentRun = currentRun;
+  state.currentWave = currentWave;
+  state.currentWaves = currentWaves;
+  state.lastWave = lastWave;
   state.lastHandoff = lastHandoff;
   state.lastIteration = lastClosed || state.lastIteration;
   state.phase = phase;
@@ -554,6 +749,7 @@ export function resume(root, args) {
         acceptHandoff(root, config, state, found, {
           currentAgent: args.currentAgent,
           currentModel: args.currentModel,
+          locked: Boolean(args.__locked),
         });
       }
       acceptedHandoff = found;
@@ -649,6 +845,9 @@ export function status(root, args) {
     workspace,
     currentPrompt,
     currentRun,
+    activePrompts: Object.keys(state.activePrompts || {}),
+    currentWave: state.currentWave || null,
+    currentWaves: Object.values(state.currentWaves || {}),
     steering: steering.rules.map((rule) => rule.id),
     steeringArtifact: steering.rules.length ? steeringArtifact(state.phase) : null,
     routing,
@@ -669,7 +868,16 @@ export function status(root, args) {
     const counts = Object.entries(matrix.counts).map(([key, value]) => `${key}=${value}`).join(" ");
     process.stdout.write(`Prompts  ${matrix.total} (${counts})\n`);
   }
-  if (currentPrompt) {
+  const waves = Object.values(state.currentWaves || {});
+  if (waves.length) {
+    process.stdout.write(
+      `Waves    ${waves.map((wave) => `${wave.id}:${wave.status}`).join(" ")}\n`,
+    );
+  }
+  const activePrompts = Object.keys(state.activePrompts || {});
+  if (activePrompts.length) {
+    process.stdout.write(`Active   prompts=${activePrompts.join(", ")}\n`);
+  } else if (currentPrompt) {
     process.stdout.write(
       `Prompt   ${currentPrompt.id} (${currentPrompt.status}) step=${currentPrompt.step || "—"} attempt=${currentPrompt.attempt || 1}\n`,
     );

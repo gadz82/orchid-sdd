@@ -2,9 +2,9 @@
 
 ### A memory-backed, specification-driven development (SDD) skill for coding agents
 
-**Status:** design proposal · **Version:** 0.5 · **Date:** 2026-10-28
+**Status:** design proposal · **Version:** 1.1 · **Date:** 2026-11-11
 **Scope:** this document specifies behaviour and artifacts. It is not an implementation plan.
-**Implementation:** orchid-sdd v0.2.0 in this repository (npm package `orchid-sdd`, CLI
+**Implementation:** orchid-sdd v1.1.0 in this repository (npm package `orchid-sdd`, CLI
 `orchid-sdd`; Node ≥20, zero runtime dependencies); see `README.md`.
 
 > This revision reorganizes the raw draft into a coherent lifecycle, resolves the contradictions between code comments and external docblocks, and turns the informal ideas (manifest, personas, prompts, ephemeral reports) into concrete contracts. Section 16 maps every original requirement to the section that now owns it; Section 17 records every design decision — all now closed.
@@ -14,6 +14,12 @@
 > **v0.4 — decisions closed:** the skill is **portable** (CLI + Markdown protocol; OpenCode is the reference adapter, not a dependency); **PM and PO are unified** into one product persona, with `PO` as an alias; **parallel isolation is a config parameter** (`execution.isolation: worktree | clone | branch`); knowledge-in-VCS, read-only sources, Markdown handover, and the language policy are applied as recommended. The decision log is §17.
 
 > **v0.5 — workspace and migration:** adds **root-owned workspace mode** for nested Git repositories, per-repo config overrides with `extends`, project-scoped memories, Git state capture, and clean-tree guards; adds the **agent-driven migration workflow** (`scan`, `backup`, `init`, `status`, `finalize`) with a mandatory `.orchid-migration-bck` backup and an LLM reconstruction plan for manifest/memory from Git and file history. New sections: §21 (workspace) and §22 (migration).
+
+> **v1.1 — parallel waves and leases:** implements the M3 wave scheduler with
+> `wave start|status|reconcile|abort`, multiple active prompts up to
+> `execution.max_parallel`, frozen per-repository wave bases, isolated worktrees,
+> mandatory `.orchid/locks/state.lock` leases, and an explicit reconciliation
+> phase before G5.
 
 **The recommendation in eight lines**
 
@@ -562,7 +568,8 @@ The skill exposes one explicit entry point with subcommands. Running `/orchid-sd
 | `/orchid-sdd discover` | 2 | PM-led requirements capture, Gherkin, consistency scan, questionnaires | G2 |
 | `/orchid-sdd assess` | 3 | Parallel technical impact analysis, negotiation, ADRs, go/no-go | G3 |
 | `/orchid-sdd plan` | 4 | Decompose into prompts, validate the DAG, generate the matrix | G4 |
-| `/orchid-sdd build [--all\|--wave N\|--prompt P-003]` | 5 | Execute ready prompts, verify tests, run adversarial CR, merge to the feature/integration or current branch, delete prompt branches | G5 per prompt |
+| `/orchid-sdd build [--wave N\|--prompt P-003]` | 5 | Execute ready prompts and run adversarial CR; wave reconciliation merges branches and cleans worktrees | G5 per wave |
+| `/orchid-sdd wave start\|status\|reconcile\|abort` | 5 | Prepare isolated worktrees, inspect active runs, reconcile/merge a wave, or abort it | G5 per wave |
 | `/orchid-sdd review` | 6 | PM logic review against PRD/TRD/Gherkin; generate follow-up prompts if needed | G6 |
 | `/orchid-sdd close` | 7 | Freeze, archive transients, rebuild manifest/index, write release notes | G7 |
 | `/orchid-sdd handover` | 8 | Generate and verify the human tutorial | G8 |
@@ -1882,6 +1889,35 @@ This is the difference between "we hope they don't collide" and "the plan proves
 - `branch` — branches in a single checkout; **requires `max_parallel: 1`**, validated at plan time.
 
 The knowledge protocol applies in every mode: agents never write `.knowledge`, and the context pack stays authoritative regardless of where the checkout lives.
+
+**Wave execution protocol (implemented in 1.1).** `orchid-sdd wave start <N>` validates
+dependencies and disjoint write scopes (including against other active waves), freezes one base
+commit per repository, creates one worktree and branch per prompt, and marks the prompts
+`ready`. A dependency owned by an unreconciled wave blocks the new wave because its code is not
+in the frozen base yet. It does not launch agents. Agents call `prompt start` for at most
+`execution.max_parallel` prompts. Several independent waves may coexist. `start` owns the full
+clean-tree guard; `wave start` ignores the intentionally dirty state, events, matrix, and
+runtime paths, but rejects uncommitted code (unless `--allow-dirty`) because worktrees freeze
+`HEAD`.
+
+`wave reconcile <N>` is the explicit reconciliation phase: it verifies terminal prompt states,
+merges branches in wave order, optionally runs the effective unit command, removes worktrees
+and branches, and emits `wave.reconciled`. Spike prompts use `spike/P-###`; their findings under
+`assessment/spikes/` are copied to the root and the branch is discarded, never merged. Each
+merged prompt emits `wave.merged`; `wave.merging` records the branch tip before the merge. A merge conflict or failed test records `wave.failed`
+and leaves the worktrees/evidence for investigation. Rerunning the same reconcile resumes from
+the recorded merge state instead of merging completed prompts twice. `wave abort` removes the
+remaining wave artifacts and marks its prompts failed; it does not rewrite commits that a
+partial reconcile already merged. G5 is refused while any wave is active or any
+prompt branch/worktree from the iteration remains; closure repeats the same artifact check.
+
+Every state mutation and event append takes an exclusive lease at
+`.orchid/locks/state.lock`. The lease stores owner, PID, host, purpose, and expiry; a live owner
+blocks with a diagnostic, while a crashed owner or expired lease is reclaimed. Nested calls in
+one CLI process share the lease reentrantly, so composed commands cannot deadlock. The event log
+has a single writer, so `manifest.jsonld`, `matrix.json`, and `index/` are never written by
+parallel agents. There is no "best effort" mode: if the lease cannot be acquired, the command
+fails.
 
 **Branch lifecycle.** Prompt worktrees and temporary branches are disposable. Create one per prompt (`orchid/<iteration>/<prompt-id>`), merge it, then remove the worktree and delete the branch immediately after CR passes. A leftover prompt branch is a build failure, not cleanup debt. The iteration has at most one long-lived feature/integration branch, and only when the user asked for one; otherwise prompt branches merge into the current branch of each affected repository. At closure, verify no prompt branch or worktree remains, merge the feature/integration branch to its chosen base, and delete it unless repository policy explicitly requires retention.
 

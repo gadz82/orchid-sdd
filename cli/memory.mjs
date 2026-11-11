@@ -26,6 +26,7 @@ import {
   walkFiles,
 } from "./util.mjs";
 import { formatLedgerErrors, parseRelatedIds, readLedger } from "./dependencies.mjs";
+import { withStateLock } from "./lock.mjs";
 
 export const NODE_TYPES = new Set([
   "Requirement",
@@ -58,6 +59,13 @@ export function newUuid() {
 }
 
 export function record(root, args) {
+  if (!args.__locked) {
+    return withStateLock(
+      root,
+      () => record(root, { ...args, __locked: true }),
+      { purpose: "record memory", ttlMs: 60000 },
+    );
+  }
   const { config, state } = context(root);
   const type = args.type;
   if (!type || !NODE_TYPES.has(type)) {
@@ -143,7 +151,7 @@ export function record(root, args) {
     subject: id,
     payload: { node },
     actor: args.actor || "orchestrator",
-  });
+  }, { locked: true });
   writeProjection(root, config, state);
   writeState(root, state);
 
@@ -160,6 +168,13 @@ export function record(root, args) {
 }
 
 export function index(root, args) {
+  if (!args.check && !args.__locked) {
+    return withStateLock(
+      root,
+      () => index(root, { ...args, __locked: true }),
+      { purpose: "rebuild projections", ttlMs: 120000 },
+    );
+  }
   const { config, state } = context(root);
   if (args.check) {
     const ledger = readLedger(root, config);

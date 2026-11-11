@@ -32,6 +32,25 @@ test("prompt execution state survives step and completion transitions", () => {
   assert.equal(state.runs[prompt.runId].status, "completed");
 });
 
+test("a new iteration does not inherit prompt attempts or active cursors", () => {
+  const root = tmp();
+  setup(root);
+  start(root);
+  assert.equal(cli(root, "prompt", "start", "P-001").code, 0);
+  assert.equal(cli(root, "abandon", "done").code, 0);
+  start(root, "Add email verification to the customer portal");
+  const state = readJson(path.join(root, ".orchid", "state.json"));
+  assert.deepEqual(state.prompts, {});
+  assert.deepEqual(state.runs, {});
+  assert.deepEqual(state.activePrompts, {});
+  assert.deepEqual(state.currentWaves, {});
+  assert.equal(state.currentWave, null);
+  assert.equal(state.lastWave, null);
+  assert.equal(state.lastHandoff, null);
+  assert.equal(state.currentPrompt, null);
+  assert.equal(state.currentRun, null);
+});
+
 test("resume replays prompt and run state from events", () => {
   const root = tmp();
   setup(root);

@@ -45,6 +45,7 @@ const BUNDLE = [
   "cli",
   ".skill",
   "docs/personas",
+  "docs/reference",
 ];
 
 function normalizeAgent(value) {

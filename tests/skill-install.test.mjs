@@ -16,6 +16,7 @@ test("skill install targets OpenCode project paths", () => {
     ".opencode/skills/orchid-sdd/cli/cli.mjs",
     ".opencode/skills/orchid-sdd/bin/orchid-sdd.mjs",
     ".opencode/skills/orchid-sdd/docs/personas/PM.md",
+    ".opencode/skills/orchid-sdd/docs/reference/cli.md",
     ".opencode/commands/orchid-sdd.md",
   ]) {
     assert.ok(fs.existsSync(path.join(root, file)), `missing ${file}`);

@@ -21,6 +21,7 @@ import {
   writeJsonCompact,
 } from "./util.mjs";
 import { INDEX_REL, ledgerIndex } from "./dependencies.mjs";
+import { withStateLock } from "./lock.mjs";
 
 export function paths(root, cfg) {
   const knowledge = path.resolve(root, cfg.knowledge_folder);
@@ -81,8 +82,12 @@ export function newState(cfg, configHash) {
     locks: {},
     prompts: {},
     runs: {},
+    activePrompts: {},
     currentPrompt: null,
     currentRun: null,
+    currentWave: null,
+    currentWaves: {},
+    lastWave: null,
     lastHandoff: null,
     lastEvent: null,
     memoryEvent: null,
@@ -95,10 +100,36 @@ export function readState(root) {
   const state = readJson(file);
   state.prompts = state.prompts || {};
   state.runs = state.runs || {};
+  state.activePrompts = state.activePrompts || {};
   state.currentPrompt = state.currentPrompt || null;
   state.currentRun = state.currentRun || null;
+  state.currentWave = state.currentWave || null;
+  state.currentWaves = state.currentWaves || {};
+  if (state.currentWave?.id && !state.currentWaves[state.currentWave.id]) {
+    state.currentWaves[state.currentWave.id] = state.currentWave;
+  }
+  if (!state.currentWave && Object.keys(state.currentWaves).length) {
+    const waves = Object.values(state.currentWaves);
+    state.currentWave = waves[waves.length - 1];
+  }
+  for (const wave of Object.values(state.currentWaves)) {
+    if (wave && typeof wave === "object") {
+      wave.prompts = Array.isArray(wave.prompts) ? wave.prompts : [];
+    }
+  }
+  state.lastWave = state.lastWave || null;
+  if (state.lastWave && typeof state.lastWave === "object") {
+    state.lastWave.prompts = Array.isArray(state.lastWave.prompts) ? state.lastWave.prompts : [];
+  }
   state.lastHandoff = state.lastHandoff || null;
   state.memoryEvent = state.memoryEvent ?? state.lastEvent ?? null;
+  // Migrate a pre-wave single cursor into the multi-run projection.
+  if (!Object.keys(state.activePrompts).length && state.currentPrompt) {
+    const current = state.prompts[state.currentPrompt];
+    if (current?.status === "running" && current.runId) {
+      state.activePrompts[state.currentPrompt] = current.runId;
+    }
+  }
   return state;
 }
 
@@ -107,31 +138,41 @@ export function writeState(root, state) {
   writeJson(file, state);
 }
 
-export function appendEvent(root, cfg, state, { type, subject = null, payload = {}, actor = "orchestrator", phase = null }) {
-  const p = paths(root, cfg);
-  ensureDir(p.events);
-  const file = path.join(p.events, `${month()}.jsonl`);
-  let prev = null;
-  if (exists(file)) {
-    const lines = readText(file).split("\n").filter(Boolean);
-    if (lines.length) prev = sha256(lines[lines.length - 1]);
-  }
-  const event = {
-    eventId: uuid7(),
-    ts: nowIso(),
-    iteration: state.activeIteration || null,
-    phase: phase || state.phase || "setup",
-    actor,
-    type,
-    subject,
-    payload,
-    prev,
+export function appendEvent(
+  root,
+  cfg,
+  state,
+  { type, subject = null, payload = {}, actor = "orchestrator", phase = null },
+  options = {},
+) {
+  const write = () => {
+    const p = paths(root, cfg);
+    ensureDir(p.events);
+    const file = path.join(p.events, `${month()}.jsonl`);
+    let prev = null;
+    if (exists(file)) {
+      const lines = readText(file).split("\n").filter(Boolean);
+      if (lines.length) prev = sha256(lines[lines.length - 1]);
+    }
+    const event = {
+      eventId: uuid7(),
+      ts: nowIso(),
+      iteration: state.activeIteration || null,
+      phase: phase || state.phase || "setup",
+      actor,
+      type,
+      subject,
+      payload,
+      prev,
+    };
+    fs.appendFileSync(file, `${JSON.stringify(event)}\n`, "utf8");
+    state.lastEvent = event.eventId;
+    if (MEMORY_EVENT_TYPES.has(type)) state.memoryEvent = event.eventId;
+    writeState(root, state);
+    return event;
   };
-  fs.appendFileSync(file, `${JSON.stringify(event)}\n`, "utf8");
-  state.lastEvent = event.eventId;
-  if (MEMORY_EVENT_TYPES.has(type)) state.memoryEvent = event.eventId;
-  writeState(root, state);
-  return event;
+  if (options.locked) return write();
+  return withStateLock(root, write, { purpose: `append ${type}` });
 }
 
 export function readEvents(root, cfg) {
@@ -140,9 +181,14 @@ export function readEvents(root, cfg) {
   const events = [];
   for (const name of fs.readdirSync(dir).filter((n) => n.endsWith(".jsonl")).sort()) {
     const file = path.join(dir, name);
-    const lines = readText(file).split("\n");
+    const text = readText(file);
+    const complete = text.endsWith("\n");
+    const lines = text.split("\n");
     lines.forEach((line, i) => {
       if (!line.trim()) return;
+      // A writer appends the newline last. Readers never take the lease, so a
+      // final unterminated line is an in-flight append, not a corrupt event.
+      if (!complete && i === lines.length - 1) return;
       try {
         events.push(JSON.parse(line));
       } catch (error) {

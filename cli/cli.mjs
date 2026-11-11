@@ -24,6 +24,7 @@ import { routeCommand } from "./models.mjs";
 import { promptCommand } from "./prompts.mjs";
 import { handoffCommand } from "./handoff.mjs";
 import { dependenciesCommand } from "./dependencies.mjs";
+import { waveCommand } from "./waves.mjs";
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -112,6 +113,10 @@ Iteration
   gate pass|fail G#           Record a gate with --evidence or --note
   discover | assess | plan    Advance to the next phase (gates enforced)
   build | review              Advance build / logic review
+  wave start N                Prepare a wave: create worktrees and mark prompts ready
+  wave status [N]             Show wave, active prompts, worktrees
+  wave reconcile N            Merge prompt branches, clean worktrees, close the wave
+  wave abort N                Abort a wave and remove its worktrees/branches
   close --approve             Close the active iteration
   handover [--approve]        Review or accept the human handover
   abandon "<reason>"          Abandon the active iteration
@@ -157,6 +162,12 @@ prompt options
   prompt start P-001 [--step NAME]
   prompt step P-001 --step NAME
   prompt complete|fail|waive P-001 [--note TEXT] [--evidence PATH] [--json]
+
+wave options
+  wave start W4 [--allow-dirty] [--json]
+  wave status [W4] [--json]
+  wave reconcile W4 [--test] [--json]
+  wave abort W4 [--json]
 
 handoff options
   handoff list [--json]
@@ -362,6 +373,14 @@ export async function main(argv) {
           },
           command,
         );
+      case "wave":
+        return waveCommand(root, {
+          action: positional[0] || "status",
+          wave: positional[1] || args.wave,
+          allowDirty: flag(args["allow-dirty"]),
+          test: flag(args.test),
+          json,
+        });
       case "close":
         return close(root, { approve: flag(args.approve), force: flag(args.force), json });
       case "handover":

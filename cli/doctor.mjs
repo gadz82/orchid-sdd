@@ -9,8 +9,16 @@ import { CONTEXT } from "./setup.mjs";
 import { checkProjection, loadManifestNodes, paths, readState, recallIndexProblem, writeProjection } from "./store.mjs";
 import { ensureDir, exists, formatJson, readJson, writeJson } from "./util.mjs";
 import { LEDGER_FILE, formatLedgerDiagnostic, parseRelatedIds, readLedger } from "./dependencies.mjs";
+import { readStateLock, withStateLock } from "./lock.mjs";
 
 export function runDoctor(root, skillRoot, options = {}) {
+  if (options.fix && !options.__locked) {
+    return withStateLock(
+      root,
+      () => runDoctor(root, skillRoot, { ...options, __locked: true }),
+      { purpose: "doctor --fix", ttlMs: 120000 },
+    );
+  }
   const errors = [];
   const warnings = [];
   const infos = [];
@@ -70,6 +78,39 @@ export function runDoctor(root, skillRoot, options = {}) {
         }
       }
       if (state.gates && state.gates.G0 !== "passed") warn("gate G0 is not passed");
+      const active = Object.keys(state.activePrompts || {});
+      const maxParallel = Number(config.execution.max_parallel) || 1;
+      if (active.length > maxParallel) {
+        fail(`state has ${active.length} active prompts; execution.max_parallel is ${maxParallel}`);
+      }
+      for (const id of active) {
+        if (state.prompts?.[id]?.status !== "running") {
+          fail(`active prompt ${id} is not marked running`);
+        }
+      }
+      for (const wave of Object.values(state.currentWaves || {})) {
+        if (!["running", "ready", "failed"].includes(wave.status)) {
+          warn(`current wave ${wave.id} has status ${wave.status}`);
+        }
+        // A failed reconcile may have already removed some worktrees; only a
+        // live wave promises one worktree per unmerged prompt.
+        if (!["running", "ready"].includes(wave.status)) continue;
+        for (const entry of wave.prompts || []) {
+          if (entry.merged || entry.waived) continue;
+          if (entry.worktree && !exists(path.join(root, entry.worktree))) {
+            warn(`wave ${wave.id}: worktree missing for ${entry.id}: ${entry.worktree}`);
+          }
+        }
+      }
+      const lease = readStateLock(root);
+      if (lease) {
+        const expires = Date.parse(lease.expiresAt || "");
+        if (!Number.isFinite(expires) || expires <= Date.now()) {
+          warn("state lease is expired; the next mutation will reclaim it");
+        } else {
+          info(`state lease held by ${lease.host || "unknown"} pid=${lease.pid || "?"} until ${lease.expiresAt}`);
+        }
+      }
     } catch (error) {
       fail(`cannot read state: ${error.message}`);
     }
@@ -284,8 +325,14 @@ export function runDoctor(root, skillRoot, options = {}) {
   if (config.budgets.per_iteration_warn >= config.budgets.per_iteration_stop) {
     fail("budgets.per_iteration_warn must be lower than budgets.per_iteration_stop");
   }
+  if (!Number.isInteger(config.execution.max_parallel) || config.execution.max_parallel < 1) {
+    fail("execution.max_parallel must be a positive integer");
+  }
   if (config.execution.isolation === "branch" && config.execution.max_parallel !== 1) {
     fail("execution.isolation=branch requires max_parallel=1");
+  }
+  if (config.execution.max_parallel > 1 && config.execution.isolation !== "worktree") {
+    warn("parallel waves require execution.isolation=worktree; wave commands reject other modes");
   }
 
   if (state && exists(p.manifest)) {

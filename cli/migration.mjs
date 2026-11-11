@@ -4,6 +4,7 @@ import { detectProfile, detectProjectName, loadConfig } from "./config.mjs";
 import { runSetup } from "./setup.mjs";
 import { detectWorkspaceRepos, gitInfo, workspaceConfig } from "./workspace.mjs";
 import { paths, readState, writeProjection, writeState } from "./store.mjs";
+import { withStateLock } from "./lock.mjs";
 import {
   OrchidError,
   ensureDir,
@@ -761,6 +762,13 @@ function writeScaffold(root, scan, backup, repos, legacy = null) {
 }
 
 export function migrateInit(root, skillRoot, options = {}) {
+  if (!options.__locked) {
+    return withStateLock(
+      root,
+      () => migrateInit(root, skillRoot, { ...options, __locked: true }),
+      { purpose: "migrate init", ttlMs: 30 * 60 * 1000 },
+    );
+  }
   const scan = scanProject(root, skillRoot);
   const repos = options.single ? [] : scan.workspace.repos;
   const stateFile = path.join(root, ".orchid", "state.json");
@@ -863,6 +871,13 @@ export function migrateStatus(root, args = {}) {
 }
 
 export function migrateFinalize(root, skillRoot, options = {}) {
+  if (!options.__locked) {
+    return withStateLock(
+      root,
+      () => migrateFinalize(root, skillRoot, { ...options, __locked: true }),
+      { purpose: "migrate finalize", ttlMs: 30 * 60 * 1000 },
+    );
+  }
   const loaded = loadConfig(root);
   const state = readState(root);
   if (!state.migration && !options.force) {
@@ -928,6 +943,13 @@ orchid-sdd start "<title>"
 
 export function migrateCommand(root, skillRoot, args = {}) {
   const action = String(args.action || "status").toLowerCase();
+  if (action === "backup" && !args.__locked) {
+    return withStateLock(
+      root,
+      () => migrateCommand(root, skillRoot, { ...args, __locked: true }),
+      { purpose: "migrate backup", ttlMs: 30 * 60 * 1000 },
+    );
+  }
   if (action === "scan") {
     const scan = scanProject(root, skillRoot);
     const output = args.output

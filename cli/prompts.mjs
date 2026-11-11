@@ -13,9 +13,10 @@ import {
   writeProjection,
   writeState,
 } from "./store.mjs";
-import { OrchidError, exists, formatJson, nowIso, uuid7 } from "./util.mjs";
+import { OrchidError, exists, formatJson, nowIso, uuid7, writeJson } from "./util.mjs";
 import { parseFrontMatter } from "./yaml.mjs";
 import { formatLedgerDiagnostic, readLedger } from "./dependencies.mjs";
+import { withStateLock } from "./lock.mjs";
 
 const PROMPT_RE = /^P-[0-9]{3}$/;
 const DEP_RE = /^DEP-[0-9]{3}$/;
@@ -57,7 +58,7 @@ function updateMatrix(root, config, state, prompt, status, step) {
   item.status = status;
   if (step) item.step = step;
   item.updatedAt = nowIso();
-  fs.writeFileSync(file, `${JSON.stringify(matrix, null, 2)}\n`, "utf8");
+  writeJson(file, matrix);
 }
 
 function promptRoute(root, config, state, prompt) {
@@ -258,14 +259,23 @@ function validatePrompts(root, config, state) {
 }
 
 export function promptCommand(root, args = {}) {
+  const action = String(args.action || "list");
+  const id = args.id ? String(args.id) : null;
+  const mutating = ["start", "step", "complete", "fail", "waive"].includes(action);
+  if (mutating && !args.__locked) {
+    return withStateLock(
+      root,
+      () => promptCommand(root, { ...args, __locked: true }),
+      { purpose: `prompt ${action}${id ? ` ${id}` : ""}`, ttlMs: 60000 },
+    );
+  }
   const { config } = loadConfig(root);
   const state = readState(root);
   requireActive(state);
-  const action = String(args.action || "list");
-  const id = args.id ? String(args.id) : null;
   if (id && !PROMPT_RE.test(id)) {
     throw new OrchidError(`prompt id must look like P-001: ${id}`);
   }
+  const eventOptions = { locked: Boolean(args.__locked) };
 
   if (action === "list") {
     const rows = listPrompts(state);
@@ -332,16 +342,51 @@ export function promptCommand(root, args = {}) {
   if (!id) throw new OrchidError(`prompt ${action} requires a prompt id`);
 
   if (action === "start") {
-    if (state.currentPrompt && state.currentPrompt !== id) {
+    const waves = Object.values(state.currentWaves || {});
+    const wave = waves.find((entry) => (entry.prompts || []).some((prompt) => prompt.id === id)) ||
+      (waves.length ? null : state.currentWave);
+    const wavePrompt = wave && Array.isArray(wave.prompts)
+      ? wave.prompts.find((entry) => entry.id === id)
+      : null;
+    if (waves.length && !wave) {
+      throw new OrchidError(`prompt ${id} is not part of an active wave`);
+    }
+    if (wave) {
+      if (!wavePrompt) throw new OrchidError(`prompt ${id} is not part of active wave ${wave.id}`);
+      if (wave.status !== "running") {
+        throw new OrchidError(`wave ${wave.id} is ${wave.status}; reconcile or abort it first`);
+      }
+      if (state.prompts?.[id]?.status === "running") {
+        throw new OrchidError(`prompt ${id} is already running`);
+      }
+      const activeCount = Object.keys(state.activePrompts || {}).length;
+      const maxParallel = Math.max(1, Number(config.execution.max_parallel) || 1);
+      if (activeCount >= maxParallel) {
+        throw new OrchidError(
+          `the project already has ${activeCount} active prompt(s); max_parallel is ${maxParallel}`,
+        );
+      }
+      if (wavePrompt.worktree && !exists(path.join(root, wavePrompt.worktree))) {
+        throw new OrchidError(
+          `worktree for ${id} is missing: ${wavePrompt.worktree}; abort and restart the wave ` +
+            `with \`orchid-sdd wave abort ${wave.number}\` then \`orchid-sdd wave start ${wave.number}\``,
+        );
+      }
+    } else if (
+      Object.keys(state.activePrompts || {}).length ||
+      (state.currentPrompt && state.currentPrompt !== id)
+    ) {
+      const active = state.currentPrompt || Object.keys(state.activePrompts || {})[0];
       throw new OrchidError(
-        `prompt ${state.currentPrompt} is still active; complete, fail, or waive it before starting ${id}`,
+        `prompt ${active} is still active; complete, fail, or waive it before starting ${id}`,
       );
     }
     const routing = promptRoute(root, config, state, id);
     if (config.models.mismatch === "block" && routing.status === "mismatch") {
       throw new OrchidError(routing.message);
     }
-    const attempt = (state.prompts?.[id]?.attempt || 0) + 1;
+    const prior = state.prompts?.[id];
+    const attempt = prior?.iteration === state.activeIteration ? (prior.attempt || 0) + 1 : 1;
     const runId = uuid7();
     const step = String(args.step || "implement");
     const prompt = {
@@ -349,10 +394,17 @@ export function promptCommand(root, args = {}) {
       status: "running",
       step,
       attempt,
+      iteration: state.activeIteration,
       runId,
       startedAt: nowIso(),
       updatedAt: nowIso(),
     };
+    if (wavePrompt) {
+      prompt.waveId = wave.id;
+      for (const key of ["type", "worktree", "branch", "repoId", "repoPath", "base"]) {
+        if (wavePrompt[key] !== undefined) prompt[key] = wavePrompt[key];
+      }
+    }
     state.prompts[id] = prompt;
     state.runs[runId] = {
       id: runId,
@@ -363,14 +415,25 @@ export function promptCommand(root, args = {}) {
       status: "running",
       startedAt: prompt.startedAt,
       routing,
+      ...(wavePrompt
+        ? {
+            wave: wave.id,
+            type: wavePrompt.type || "build",
+            worktree: wavePrompt.worktree,
+            branch: wavePrompt.branch,
+            repoId: wavePrompt.repoId,
+          }
+        : {}),
     };
+    state.activePrompts = state.activePrompts || {};
+    state.activePrompts[id] = runId;
     state.currentPrompt = id;
     state.currentRun = runId;
     appendEvent(root, config, state, {
       type: "prompt.started",
       subject: `prompt:${id}`,
       payload: { prompt, run: state.runs[runId], routing },
-    });
+    }, eventOptions);
     writeProjection(root, config, state);
     updateMatrix(root, config, state, id, "running", step);
     if (args.json) {
@@ -380,6 +443,10 @@ export function promptCommand(root, args = {}) {
     process.stdout.write(`Prompt ${id} running\n`);
     process.stdout.write(`  step:    ${step}\n`);
     process.stdout.write(`  attempt: ${attempt}\n`);
+    if (prompt.worktree) {
+      process.stdout.write(`  worktree: ${prompt.worktree}\n`);
+      process.stdout.write(`  root:     ${root} (run orchid-sdd here, not inside the worktree)\n`);
+    }
     printRoute(routing);
     return 0;
   }
@@ -404,7 +471,7 @@ export function promptCommand(root, args = {}) {
       type: "prompt.step",
       subject: `prompt:${id}`,
       payload: { prompt: id, step, run: prompt.runId },
-    });
+    }, eventOptions);
     writeProjection(root, config, state);
     updateMatrix(root, config, state, id, prompt.status, step);
     if (args.json) {
@@ -426,9 +493,12 @@ export function promptCommand(root, args = {}) {
     run.completedAt = prompt.updatedAt;
     run.note = args.note || null;
   }
+  state.activePrompts = state.activePrompts || {};
+  delete state.activePrompts[id];
   if (state.currentPrompt === id) {
-    state.currentPrompt = null;
-    state.currentRun = null;
+    const remaining = Object.keys(state.activePrompts);
+    state.currentPrompt = remaining.length ? remaining[remaining.length - 1] : null;
+    state.currentRun = state.currentPrompt ? state.activePrompts[state.currentPrompt] : null;
   }
   appendEvent(root, config, state, {
     type: action === "complete" ? "prompt.completed" : action === "fail" ? "prompt.failed" : "prompt.waived",
@@ -440,7 +510,7 @@ export function promptCommand(root, args = {}) {
       evidence: args.evidence || null,
       run: prompt.runId,
     },
-  });
+  }, eventOptions);
   writeProjection(root, config, state);
   updateMatrix(root, config, state, id, status, prompt.step);
   if (args.json) {

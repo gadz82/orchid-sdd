@@ -25,6 +25,7 @@ test("setup ignores only the generated recall index", () => {
   const gitignore = fs.readFileSync(path.join(root, ".gitignore"), "utf8");
 
   assert.match(gitignore, /\.knowledge\/index\/recall\.json/);
+  assert.match(gitignore, /\.orchid\/locks\//);
 
   // Core indexes and the manifest stay versioned.
   assert.doesNotMatch(gitignore, /\.knowledge\/index\/topics\.json/);

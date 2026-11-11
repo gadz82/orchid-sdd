@@ -36,15 +36,17 @@ function runGit(cwd, args) {
 }
 
 export function gitInfo(repoPath) {
-  if (!exists(path.join(repoPath, ".git"))) return { git: false, dirty: 0 };
-  const dirty = (runGit(repoPath, ["status", "--porcelain"]) || "").split("\n").filter(Boolean).length;
+  if (!exists(path.join(repoPath, ".git"))) return { git: false, dirty: 0, dirtyFiles: [] };
+  const status = runGit(repoPath, ["status", "--porcelain"]);
+  const dirtyFiles = (status || "").split("\n").filter(Boolean);
   const firstLine = (runGit(repoPath, ["log", "--reverse", "--format=%cs"]) || "").split("\n")[0] || null;
   return {
     git: true,
     branch: runGit(repoPath, ["branch", "--show-current"]) || null,
     head: runGit(repoPath, ["rev-parse", "--short", "HEAD"]) || null,
     origin: runGit(repoPath, ["remote", "get-url", "origin"]) || null,
-    dirty,
+    dirty: dirtyFiles.length,
+    dirtyFiles,
     commits: Number(runGit(repoPath, ["rev-list", "--count", "HEAD"]) || 0),
     firstCommit: firstLine,
     lastCommit: runGit(repoPath, ["log", "-1", "--format=%cs"]) || null,
@@ -257,13 +259,26 @@ export function workspaceStatus(root, config) {
     });
 }
 
+// These paths are runtime artifacts created by the CLI itself. They must not
+// make an otherwise clean tree fail the iteration-start guard, especially for
+// projects created before v1.1 added them to .gitignore.
+const RUNTIME_PATHS = [".orchid/locks/", ".orchid/worktrees/"];
+
+function codeChanges(info) {
+  return (info.dirtyFiles || []).filter(
+    (line) => !RUNTIME_PATHS.some((runtime) => line.includes(runtime)),
+  );
+}
+
 export function assertClean(root, config, { allowDirty = false } = {}) {
   if (!config.execution.require_clean_tree || allowDirty) return;
   const dirty = [];
   const rootInfo = gitInfo(root);
-  if (rootInfo.git && rootInfo.dirty) dirty.push(`root (${rootInfo.dirty} change(s))`);
+  const rootChanges = codeChanges(rootInfo);
+  if (rootInfo.git && rootChanges.length) dirty.push(`root (${rootChanges.length} change(s))`);
   for (const repo of workspaceStatus(root, config)) {
-    if (repo.git.git && repo.git.dirty) dirty.push(`${repo.id} (${repo.git.dirty} change(s))`);
+    const changes = codeChanges(repo.git);
+    if (repo.git.git && changes.length) dirty.push(`${repo.id} (${changes.length} change(s))`);
   }
   if (dirty.length) {
     throw new OrchidError(
