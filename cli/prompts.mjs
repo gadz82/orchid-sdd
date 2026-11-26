@@ -13,10 +13,20 @@ import {
   writeProjection,
   writeState,
 } from "./store.mjs";
-import { OrchidError, exists, formatJson, nowIso, uuid7, writeJson } from "./util.mjs";
+import {
+  OrchidError,
+  ensureDir,
+  exists,
+  formatJson,
+  nowIso,
+  rel,
+  uuid7,
+  writeJson,
+} from "./util.mjs";
 import { parseFrontMatter } from "./yaml.mjs";
 import { formatLedgerDiagnostic, readLedger } from "./dependencies.mjs";
 import { withStateLock } from "./lock.mjs";
+import { buildPromptContextPack } from "./agents.mjs";
 
 const PROMPT_RE = /^P-[0-9]{3}$/;
 const DEP_RE = /^DEP-[0-9]{3}$/;
@@ -35,6 +45,14 @@ function requireActive(state) {
   if (!state.activeIteration) {
     throw new OrchidError("no active iteration; run `orchid-sdd start` first");
   }
+}
+
+function agentContextScopeViolations(config, scopes) {
+  if (!config.agents || config.agents.enabled === false) return [];
+  return (scopes || []).filter((scope) => {
+    const value = String(scope).replace(/\\/g, "/");
+    return /(^|\/)AGENTS\.md$/.test(value) || value.startsWith(".orchid/agents/");
+  });
 }
 
 function updateMatrix(root, config, state, prompt, status, step) {
@@ -205,6 +223,13 @@ function validatePrompts(root, config, state) {
     ) {
       if (Array.isArray(data.scope.write) && !isStringArray(data.scope.write)) {
         errors.push(`${name}: scope.write: must be a list of strings`);
+      } else if (Array.isArray(data.scope.write)) {
+        const violations = agentContextScopeViolations(config, data.scope.write);
+        for (const scope of violations) {
+          errors.push(
+            `${name}: scope.write must not touch agent context "${scope}"; keep AGENTS.md and .orchid/agents changes in the end-of-iteration maintenance flow`,
+          );
+        }
       }
       if (present(data.scope.read) && !isStringArray(data.scope.read)) {
         errors.push(`${name}: scope.read: must be a list of strings`);
@@ -425,6 +450,31 @@ export function promptCommand(root, args = {}) {
           }
         : {}),
     };
+    const contract = readPromptContract(root, config, state, id);
+    const scopes = contract && contract.scope && Array.isArray(contract.scope.write)
+      ? contract.scope.write
+      : [];
+    const violations = agentContextScopeViolations(config, scopes);
+    if (violations.length) {
+      throw new OrchidError(
+        `prompt ${id} writes agent context (${violations.join(", ")}); move AGENTS.md and .orchid/agents changes to the end-of-iteration maintenance flow`,
+      );
+    }
+    const contextPack = buildPromptContextPack(root, config, scopes);
+    if (contextPack) {
+      const file = path.join(
+        paths(root, config).iterations,
+        state.activeIteration,
+        "execution",
+        "runs",
+        runId,
+        "context.md",
+      );
+      ensureDir(path.dirname(file));
+      fs.writeFileSync(file, contextPack.content, "utf8");
+      state.runs[runId].context = rel(root, file);
+      prompt.context = rel(root, file);
+    }
     state.activePrompts = state.activePrompts || {};
     state.activePrompts[id] = runId;
     state.currentPrompt = id;
@@ -446,6 +496,9 @@ export function promptCommand(root, args = {}) {
     if (prompt.worktree) {
       process.stdout.write(`  worktree: ${prompt.worktree}\n`);
       process.stdout.write(`  root:     ${root} (run orchid-sdd here, not inside the worktree)\n`);
+    }
+    if (prompt.context) {
+      process.stdout.write(`  context:  ${prompt.context} (hand this to the implementer)\n`);
     }
     printRoute(routing);
     return 0;

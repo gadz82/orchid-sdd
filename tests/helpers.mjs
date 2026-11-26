@@ -12,9 +12,13 @@ export function tmp() {
 }
 
 export function cli(root, ...args) {
+  return cliWithEnv(root, {}, ...args);
+}
+
+export function cliWithEnv(root, env, ...args) {
   const result = spawnSync(process.execPath, [BIN, "--root", root, ...args], {
     encoding: "utf8",
-    env: { ...process.env, ORCHID_DEBUG: "" },
+    env: { ...process.env, ORCHID_DEBUG: "", ...env },
   });
   return {
     code: result.status,

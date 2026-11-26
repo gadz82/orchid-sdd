@@ -87,6 +87,24 @@ The project constitution lives at `constitution_folder`;
 `.orchid/constitution/_profile/` contains the generated profile pack. Compose with
 `@include`; do not edit the skill default.
 
+## Agents
+
+Agent contexts are documented in full in [Agent contexts](agent-contexts.md).
+
+| Key | Default | Meaning / values | Acted on by |
+|---|---|---|---|
+| `agents.enabled` | `true` | Generate and switch the development context | CLI/Agent |
+| `agents.folder` | `.orchid/agents` | Relative folder for the development contexts repository | CLI |
+| `agents.link_names` | `[AGENTS.md]` | Filenames linked/switched during an iteration | CLI |
+| `agents.nested` | `true` | Detect folder-scoped domains and generate nested contexts | CLI |
+| `agents.max_targets` | `12` | Cap on detected domains | CLI |
+| `agents.switch` | `on_start` | `on_start`, `manual`, or `off` | CLI |
+| `agents.maintenance` | `warn` (new projects: `required`) | `required`, `warn`, or `off`; controls the closure check | CLI |
+| `agents.mode` | `auto` | `auto`, `library`, or `native`; `auto` prefers `agent-contexts` when available | CLI |
+
+The generated config for new projects sets `maintenance: required`. Existing
+configs without an `agents` key inherit `warn` so upgrades do not block closure.
+
 ## Steering
 
 Steering is the phase-aware layer for architecture, examples, language-agnostic

@@ -4,8 +4,9 @@
 
 orchid-sdd has two independent pieces:
 
-1. **The CLI** — a zero-dependency Node ESM program that owns state, events,
-   validation and projections.
+1. **The CLI** — a Node ESM program that owns state, events, validation and
+   projections. It ships one small runtime helper (`agent-contexts`) for the
+   development-context switch and keeps a deterministic native fallback.
 2. **The skill contract** — `SKILL.md` and its adapters, which tell the coding
    agent how to use the CLI and when to stop for approval.
 
@@ -16,7 +17,8 @@ install` writes the agent integration.
 
 - **Node.js 20+**
 - Git and a POSIX-style shell
-- No runtime npm dependencies
+- npm installs bring one runtime helper, `agent-contexts`, used only for the
+  development-context switch. A native fallback works without it.
 
 ## Choose an installation path
 
@@ -259,12 +261,18 @@ Most choices are plain YAML and can be edited later. Changing
 orchid-sdd.yml
 .orchid/{state.json,constitution/,personas/,steering/,custom/,locks/}
 .knowledge/{manifest.jsonld,events/,index/,context/,iterations/,input/,run-log/}
+.orchid/agents/{contexts.yml,agents/,sources/,MANIFEST.json,project-context.json}
 docs/knowledge/docblocks/
-AGENTS.md (managed section)
+AGENTS.md (managed section; user prose preserved)
 .gitignore (managed section)
 .github/workflows/orchid-sdd.yml
 ORCHID-SDD.md
 ```
+
+The development context is switched in at `orchid-sdd start` and restored by
+`orchid-sdd agents off`. The generated CI workflow includes an agent-context
+guard so a switched `AGENTS.md` or local `contexts.lock` cannot be committed.
+See [Agent contexts](agent-contexts.md).
 
 ## Next
 

@@ -38,6 +38,7 @@ with `node <path>/bin/orchid-sdd.mjs`.
 | Force single-repo mode | `orchid-sdd setup --single ...` | Ignore nested repos at the root |
 | Custom paths | `orchid-sdd setup --knowledge-folder knowledge --docblocks-folder docs/blocks ... --yes` | Keep artifacts outside defaults |
 | Add/override personas | `orchid-sdd setup --persona UX --persona-file QA.md --yes` | Enable a catalog persona or add a project one |
+| Disable agent contexts | `orchid-sdd setup --yes --no-agents` | Do not generate or switch the development context |
 | Inspect steering | `orchid-sdd steering list [--phase P]` | See effective rules, authority and source |
 | Apply phase steering | `orchid-sdd steering context --phase discovery` | Emit the rules the agent must apply and cite |
 | Preview writes | `orchid-sdd setup --dry-run` | See every file before writing |
@@ -46,12 +47,35 @@ with `node <path>/bin/orchid-sdd.mjs`.
 | Claude Code plugin (marketplace) | `claude plugin marketplace add gadz82/orchid-sdd` then `claude plugin install orchid-sdd@orchid-sdd` | Install a published copy |
 | Install agent skill | `orchid-sdd skill install --agent opencode` | Copy a self-contained skill + CLI into the agent directory |
 | Validate Claude plugin | `claude plugin validate .` | Check manifest and components |
-| Preflight | `orchid-sdd doctor` | Validate config, paths, personas, steering, sources |
+| Preflight | `orchid-sdd doctor` | Validate config, paths, personas, steering, sources, and committed agent-context state |
 | Offline CI check | `orchid-sdd doctor --ci` | CI without network or credentials |
 | Online source probe | `orchid-sdd doctor --online` | Check Git sources; MCP is validated but not probed |
 | Repair infrastructure | `orchid-sdd doctor --fix` | Create missing dirs, manifest and context |
 | Strict validation | `orchid-sdd doctor --strict` | Treat warnings as errors |
 | Inspect overrides | `orchid-sdd diff [--content]` | Compare project edits with skill defaults |
+
+## Agent contexts
+
+Two flows, one command family. See [Agent contexts](agent-contexts.md).
+
+| Operation | Command | Use case |
+|---|---|---|
+| Initialize dataset | `orchid-sdd agents init [--force]` | Rebuild the development context from agent sources and code domains |
+| Sync after edits | `orchid-sdd agents sync [--note TEXT]` | Refresh the development dataset, re-link if active, record its iteration evidence |
+| Activate the switch | `orchid-sdd agents on` | Manual switch to the development context |
+| Restore project files | `orchid-sdd agents off` | Restore every project `AGENTS.md` and clean generated locks |
+| Inspect | `orchid-sdd agents status [--json]` | Mode, targets, activation, last sync and maintenance |
+| List mappings | `orchid-sdd agents list [--json]` | Folder → development context file |
+| Print a context | `orchid-sdd agents show [TARGET]` | Read the context for `.` or a nested folder |
+| List project files | `orchid-sdd agents project list [--json]` | Nested project `AGENTS.md`, lines, managed status |
+| Refresh project block | `orchid-sdd agents project sync` | Update only the managed root block; record project hashes |
+| Add nested project file | `orchid-sdd agents project add src/orders [--title TEXT]` | Non-destructive skeleton; refuses to overwrite |
+
+`start` activates the switch automatically when `agents.switch: on_start`.
+`close` restores it and enforces the maintenance evidence when
+`agents.maintenance: required`; `close --approve --skip-agents` is the explicit
+exception. Use `ORCHID_AGENTS_MODE=native|library|auto` to override the mode for
+one invocation and `ORCHID_AGENTS_COPY=1` to force library copy mode.
 
 ## Iteration
 
@@ -74,7 +98,8 @@ with `node <path>/bin/orchid-sdd.mjs`.
 | Reconcile a wave | `orchid-sdd wave reconcile W4 [--test]` | Merge done branches, verify, clean worktrees |
 | Abort a wave | `orchid-sdd wave abort W4` | Remove its worktrees/branches and mark failures |
 | Advance to logic review | `orchid-sdd review` | Requires G5 and prompts done/waived; reports steering |
-| Close | `orchid-sdd close --approve` | Archive transients, freeze snapshot, record repo HEADs |
+| Close | `orchid-sdd close --approve` | Archive transients, freeze snapshot, record repo HEADs; enforces agent-context maintenance |
+| Close with an exception | `orchid-sdd close --approve --skip-agents` | Deliberate bypass of agent-context maintenance |
 | Handover review | `orchid-sdd handover` | Verify the tutorial before approval |
 | Accept handover | `orchid-sdd handover --approve` | Mark the iteration complete |
 | Abandon | `orchid-sdd abandon "descoped for this quarter"` | Archive without a release |
@@ -212,7 +237,7 @@ See [Models and efforts](configuration.md#models-and-efforts) and
 | Complete a prompt | `orchid-sdd prompt complete P-001 --note "..."` | Mark the prompt and its run done |
 | Fail or waive | `orchid-sdd prompt fail P-001 --note "..."` / `prompt waive P-001` | Record the terminal state |
 | Inspect state | `orchid-sdd prompt list --json` / `prompt show P-001` | Reconstruct the current run |
-| Validate prompt contracts | `orchid-sdd prompt validate [--json]` | Check fields, `depends_on` and `dependency_refs` |
+| Validate prompt contracts | `orchid-sdd prompt validate [--json]` | Check fields, `depends_on`, `dependency_refs`, and reject agent-context write scopes |
 | Save a handoff | `orchid-sdd handoff prepare --reason "switch model"` | Write a portable checkpoint |
 | Inspect handoffs | `orchid-sdd handoff list --json` | Find a saved checkpoint |
 | Resume normally | `orchid-sdd resume` | Rebuild state and automatically accept the latest handoff |

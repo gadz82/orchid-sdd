@@ -40,6 +40,7 @@ MIGRATION.md
   prompts/
   STATUS.json
   CODE-EXAMPLES-PROPOSAL.md   # after the agent proposal
+.orchid/agents/               # generated development contexts + preserved sources
 .orchid-migration-bck/<timestamp>/
   BACKUP.json
   restore notes
@@ -66,7 +67,18 @@ The generated plan instructs the agent to:
 5. after approval, create the blocking `.orchid/steering/code-examples.md`
    override and verify it with `doctor` and
    `steering context --phase build`;
-6. validate with `index`, `lint`, `doctor`, then `migrate finalize`.
+6. maintain both agent-context flows (`05-agent-contexts.md`): curate the nested
+   development context under `.orchid/agents/`, update the user-owned project
+   `AGENTS.md` files without overwriting user prose, add nested project contexts
+   only where a domain needs one, then run `agents project sync` and `agents
+   sync`;
+7. validate with `index`, `lint`, `doctor`, then `migrate finalize`.
+
+`migrate init` preserves every existing `AGENTS.md` (root and nested) in the
+backup and in `.orchid/agents/sources/project/`. `migrate scan` reports the
+detected project files, additional agent sources, and the domains that will
+receive nested development contexts. Generation is non-destructive; curated
+files are never replaced unless `agents init --force` is used deliberately.
 
 The proposed examples must cover every significant language, not only the most
 common one. They are never generated before approval. If the user refuses, the
@@ -82,8 +94,9 @@ orchid-sdd doctor
 orchid-sdd migrate finalize
 ```
 
-`finalize` moves the project to `phase: ready`; the next `orchid-sdd start` is
-the first real iteration.
+`finalize` refreshes both agent-context flows, moves the project to
+`phase: ready`, and writes the report; the next `orchid-sdd start` is the first
+real iteration.
 
 ## Rollback
 

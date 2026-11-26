@@ -34,7 +34,7 @@ configured to require explicit invocation.
 |---|---|
 | **Human** | Approve scope and gates, settle trade-offs, accept risk, final judge |
 | **Agent / orchestrator** | Product/technical analysis, Gherkin, negotiation, planning, subagent delegation, adversarial CR, logic review, handover, Git coordination |
-| **CLI** | Config validation, setup/migration scaffold, state + events, manifest/index projection, `record`/`recall`/`lint`, steering resolution, gate recording, workspace validation, iteration snapshots, wave worktrees/reconciliation |
+| **CLI** | Config validation, setup/migration scaffold, state + events, manifest/index projection, `record`/`recall`/`lint`, steering resolution, gate recording, workspace validation, iteration snapshots, wave worktrees/reconciliation, project/development agent-context maintenance and switch |
 | **Subagents** | One implementation prompt or one independent review each, in a fresh context |
 
 The CLI **never invents semantic memory** and never edits application code.
@@ -81,6 +81,17 @@ expiry. A live owner blocks with a diagnostic; a crashed owner or expired lease 
 reclaimed. Nested calls in one CLI process reuse the lease reentrantly. The event
 log therefore has a single writer, and parallel agents cannot race the manifest,
 matrix or indexes.
+
+## Agent context boundary
+
+The project `AGENTS.md` files belong to the user. orchid-sdd treats them as
+input, preserves them, and only manages a delimited block. The orchestrator does
+not run on that context: at `start` it switches the mapped folders to the
+development context under `.orchid/agents/`, and restores the project files at
+`agents off`/closure. This boundary keeps user policy, host-agent behaviour, and
+the orchid-sdd workflow from contaminating each other. The dataset is generated
+from the existing agent context and the codebase, nested by domain, and
+maintained as part of every iteration. See [Agent contexts](agent-contexts.md).
 
 ## The loop
 

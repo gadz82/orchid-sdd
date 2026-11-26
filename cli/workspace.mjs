@@ -3,6 +3,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { detectProfile } from "./config.mjs";
 import { loadProfile } from "./registry.mjs";
+import { isManagedAgentPath } from "./agents.mjs";
 import { OrchidError, exists } from "./util.mjs";
 import { parseYaml } from "./yaml.mjs";
 
@@ -187,7 +188,15 @@ export function loadRepoFragment(repoPath, file) {
   return data;
 }
 
-export function validateWorkspace(root, config, personas) {
+function porcelainPath(line) {
+  let value = String(line || "").replace(/^[ MADRCTU?!]{1,2}\s+/, "").trim();
+  if (value.startsWith("\"") && value.endsWith("\"")) value = value.slice(1, -1);
+  const arrow = value.indexOf(" -> ");
+  if (arrow >= 0) value = value.slice(arrow + 4).trim();
+  return value.replace(/\\/g, "/");
+}
+
+export function validateWorkspace(root, config, personas, { state = null } = {}) {
   const errors = [];
   const warnings = [];
   const repos = [];
@@ -240,8 +249,14 @@ export function validateWorkspace(root, config, personas) {
     if (!Object.values(commands).some(Boolean)) {
       warnings.push(`workspace repo "${repo.id}": no test commands configured`);
     }
-    if (info.dirty) {
-      warnings.push(`workspace repo "${repo.id}": working tree has ${info.dirty} change(s)`);
+    const managedChanges = (info.dirtyFiles || []).filter((line) => {
+      const value = porcelainPath(line);
+      return !isManagedAgentPath(root, config, state, value);
+    });
+    if (managedChanges.length) {
+      warnings.push(
+        `workspace repo "${repo.id}": working tree has ${managedChanges.length} change(s)`,
+      );
     }
     repos.push({ ...repo, git: info });
   }

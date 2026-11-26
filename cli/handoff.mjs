@@ -154,6 +154,7 @@ export function handoffCommand(root, args = {}) {
       currentWaves: state.currentWaves || {},
       lastEvent: state.lastEvent || null,
       routing,
+      agents: state.agentContext || null,
       workspace: captureWorkspaceState(root, config),
       reason: args.reason ? String(args.reason) : "manual handoff",
       createdAt: nowIso(),

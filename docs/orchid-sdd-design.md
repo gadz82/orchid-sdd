@@ -2,10 +2,11 @@
 
 ### A memory-backed, specification-driven development (SDD) skill for coding agents
 
-**Status:** design proposal · **Version:** 1.1 · **Date:** 2026-11-11
+**Status:** design proposal · **Version:** 1.2 · **Date:** 2026-11-26
 **Scope:** this document specifies behaviour and artifacts. It is not an implementation plan.
-**Implementation:** orchid-sdd v1.1.0 in this repository (npm package `orchid-sdd`, CLI
-`orchid-sdd`; Node ≥20, zero runtime dependencies); see `README.md`.
+**Implementation:** orchid-sdd in this repository (npm package `orchid-sdd`, CLI
+`orchid-sdd`; Node ≥20, one helper dependency for agent contexts with a native
+fallback); see `README.md`.
 
 > This revision reorganizes the raw draft into a coherent lifecycle, resolves the contradictions between code comments and external docblocks, and turns the informal ideas (manifest, personas, prompts, ephemeral reports) into concrete contracts. Section 16 maps every original requirement to the section that now owns it; Section 17 records every design decision — all now closed.
 
@@ -20,6 +21,13 @@
 > `execution.max_parallel`, frozen per-repository wave bases, isolated worktrees,
 > mandatory `.orchid/locks/state.lock` leases, and an explicit reconciliation
 > phase before G5.
+
+> **v1.2 — dual agent contexts:** separates the user-owned project `AGENTS.md`
+> files from an orchid-sdd development context under `.orchid/agents/`. The
+> development dataset is generated at bootstrap/migration from the existing agent
+> context and the codebase, nested by domain, activated through
+> `agent-contexts` (or the native fallback) at `start`, and maintained at every
+> iteration; closure records explicit maintenance evidence. Details in §7.7.1.
 
 **The recommendation in eight lines**
 
@@ -211,7 +219,7 @@ orchid-sdd/
 │   │   ├── profiles/              # backend, frontend, infra, monorepo
 │   │   └── artifacts/             # prd, trd, gherkin, questionnaire, adr, prompt, cr, handover
 │   └── schemas/                   # config, manifest, event, prompt, report, state, steering
-├── cli/                           # zero-dependency Node modules: config, store, commands
+├── cli/                           # Node modules: config, store, commands, agent contexts
 ├── docs/
 ├── tests/
 │   ├── fixtures/                  # golden projects for each profile
@@ -234,7 +242,8 @@ project/
 │   │   └── _profile/              # generated profile pack (setup-owned, never hand-edited)
 │   ├── personas/                  # project personas
 │   ├── steering/                  # project steering rules and examples
-│   └── custom/                    # template overrides, mirroring .skill paths
+│   ├── custom/                    # template overrides, mirroring .skill paths
+│   └── agents/                    # development agent contexts + switch (§7.7.1)
 ├── .orchid-migration-bck/         # pre-migration backups (ignored by git)
 ├── .knowledge/
 │   ├── manifest.jsonld            # generated snapshot of the active process
@@ -1393,6 +1402,57 @@ PRD §3.2 + Gherkin S-003 + prior iteration 2026-09-10-sso
 - Read `orchid-sdd steering context --phase <phase>` before Discovery and Logic Review; apply every active rule and cite its ID.
 - Run `orchid-sdd route --phase <phase>` before work; tell the user if the current model/agent is unknown or mismatched. Never switch automatically.
 ```
+
+### 7.7.1 Two agent-context flows
+
+`AGENTS.md` is no longer a single shared surface. The design separates two
+flows with different ownership:
+
+| Flow | Owner | Location | Lifetime |
+|---|---|---|---|
+| Project context | User | `AGENTS.md`, nested `AGENTS.md` | Permanent; useful without orchid-sdd |
+| Development context | orchid-sdd | `.orchid/agents/agents/**/AGENTS.md` | Active only during an iteration |
+
+**Project flow.** Setup integrates, never overwrites: it creates the root file
+when missing, appends a managed block when missing, and on later syncs replaces
+only the bytes between the managed markers. Nested project files are detected,
+preserved, hashed and never rewritten by the CLI. At the end of an iteration the
+agent updates the root and relevant nested files and runs
+`orchid-sdd agents project sync`; the recorded manifest is the closure evidence.
+
+**Development flow.** Bootstrap, migration and every iteration generate or
+refresh a nested dataset under `.orchid/agents/` from the existing agent context
+and the codebase (`contexts.yml`, `agents/**`, `sources/**`, `MANIFEST.json`).
+The dataset uses the `agent-contexts` manifest shape and is activated through
+that library when available, with a deterministic native fallback. Activation
+backs up the project files and links the development context into the mapped
+folders; `agents off` restores the project files exactly.
+
+**Switch.** With `agents.switch: on_start`, `start` activates the development
+context, `resume` reconciles a lost or leaked switch, and `abandon`/`close`
+restore it. While active, the project files are hidden and must not be edited.
+Project guidance that is still useful is preserved under
+`.orchid/agents/sources/project/` and summarized in a clearly subordinate import
+section; the orchid-sdd protocol always wins on conflict.
+
+**Closure evidence.** New projects default to `agents.maintenance: required`.
+`close` refuses while the switch is active or the current iteration has no
+`agents project sync` + `agents sync` evidence, and it verifies that neither the
+dataset hash nor the project `AGENTS.md` hash changed after the last sync.
+Existing configs without an `agents` key inherit `warn`, which reports without
+blocking. `--skip-agents` is the explicit exception.
+
+**Prompt boundary.** A development prompt must not own `AGENTS.md` or
+`.orchid/agents/**`. `prompt validate` reports an error and `prompt start`
+refuses the contract, because such writes race the end-of-iteration maintenance
+flow and create merge conflicts.
+
+**Git safety.** The switch modifies tracked files, so manual Git operations must
+run with the switch off. The generated CI workflow and `doctor` reject a
+committed `AGENTS.md` carrying the development marker, plus tracked
+`contexts.lock`/`.contexts` state. `.git/info/exclude` hides the generated local
+lock only; a user-managed lock is never touched. Copy mode (no symlink support,
+or `ORCHID_AGENTS_COPY=1`) is supported and covered by tests.
 
 ### 7.8 Write protocol and concurrency
 
@@ -2790,7 +2850,8 @@ MIGRATION.md
 │   ├── 02-memory.md
 │   ├── 03-code.md
 │   ├── 04-code-examples.md
-│   └── 05-finalize.md
+│   ├── 05-agent-contexts.md
+│   └── 06-finalize.md
 ├── CODE-EXAMPLES-PROPOSAL.md (after prompt 04)
 ├── STATUS.json
 └── REPORT.md (after finalize)

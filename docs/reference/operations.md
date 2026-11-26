@@ -7,8 +7,9 @@
 ```text
 bin/orchid-sdd.mjs       portable entry
 bin/orchid-sdd           bare-name wrapper for Claude Code's plugin PATH
-cli/                     zero-dependency implementation
+cli/                     CLI implementation (one helper dependency for agent contexts)
   config.mjs             defaults, validation, rendering, detection
+  agents.mjs             project/development agent contexts and the switch
   registry.mjs           profiles, personas, aliases, routing
   models.mjs             model/effort routing and identity checks
   prompts.mjs            prompt/run/step execution state
@@ -60,6 +61,10 @@ sources; MCP sources are validated but not probed.
 log. `lint --check` verifies anchors, descriptions, docblock `History` and inline
 comment limits.
 
+The generated `.github/workflows/orchid-sdd.yml` also includes a **Guard agent
+context** step: it fails when a switched `AGENTS.md` (development marker) or a
+local `contexts.lock` is committed. `doctor` performs the same checks locally.
+
 ## Tests
 
 ```bash
@@ -74,7 +79,9 @@ steering setup/resolution, phase context, model effort resolution and mismatch
 alerts, prompt/run state, handoff checkpoints, project rule overrides, npm skill
 installation, every profile’s personas/tests/constitution pack, the recall index
 and its history modes, deterministic alias resolution, parallel waves, worktrees,
-reconciliation, retries, abort, leases and workspace wave isolation.
+reconciliation, retries, abort, leases, workspace wave isolation, project and
+development agent contexts in library/native/copy modes, crash-journal recovery,
+symlinked project files, committed-switch guards and prompt scope boundaries.
 
 ## Recall benchmark
 

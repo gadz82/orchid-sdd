@@ -53,6 +53,20 @@
     "docblocks": { "type": "object" },
     "personas": { "type": "object" },
     "constitution": { "type": "object" },
+    "agents": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "folder": { "type": "string" },
+        "link_names": { "type": "array", "items": { "type": "string" } },
+        "nested": { "type": "boolean" },
+        "max_targets": { "type": "integer", "minimum": 1 },
+        "switch": { "enum": ["on_start", "manual", "off"] },
+        "maintenance": { "enum": ["required", "warn", "off"] },
+        "mode": { "enum": ["auto", "library", "native"] }
+      }
+    },
     "models": {
       "type": "object",
       "additionalProperties": false,

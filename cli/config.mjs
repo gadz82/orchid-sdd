@@ -68,6 +68,16 @@ export const DEFAULT_CONFIG = {
     require_adr_for_deviation: true,
     lock: true,
   },
+  agents: {
+    enabled: true,
+    folder: ".orchid/agents",
+    link_names: ["AGENTS.md"],
+    nested: true,
+    max_targets: 12,
+    switch: "on_start",
+    maintenance: "warn",
+    mode: "auto",
+  },
   steering: {
     enabled: [
       "architecture-boundaries",
@@ -259,6 +269,16 @@ export const CONFIG_SCHEMA = S.map({
     require_adr_for_deviation: S.bool,
     lock: S.bool,
   }),
+  agents: S.map({
+    enabled: S.bool,
+    folder: S.str,
+    link_names: S.list(S.str),
+    nested: S.bool,
+    max_targets: S.int,
+    switch: S.enum("on_start", "manual", "off"),
+    maintenance: S.enum("required", "warn", "off"),
+    mode: S.enum("auto", "library", "native"),
+  }),
   steering: S.map({
     enabled: S.list(S.str),
     search_paths: S.list(S.str),
@@ -421,7 +441,49 @@ export function validateConfig(raw) {
   validateWorkspace(raw.workspace, errors);
   validateSteering(raw.steering, errors);
   validateModels(raw.models, errors);
+  validateAgents(raw.agents, errors);
   return errors;
+}
+
+function validateAgents(agents, errors) {
+  if (!agents || typeof agents !== "object" || Array.isArray(agents)) return;
+  if (agents.folder !== undefined) {
+    const value = agents.folder;
+    if (
+      typeof value !== "string" ||
+      !value.trim() ||
+      value.trim() === "." ||
+      path.isAbsolute(value) ||
+      value.split(/[\\/]/).includes("..")
+    ) {
+      errors.push("agents.folder must be a relative path inside the project");
+    }
+  }
+  if (agents.max_targets !== undefined && (!Number.isInteger(agents.max_targets) || agents.max_targets < 1)) {
+    errors.push("agents.max_targets must be a positive integer");
+  }
+  if (Array.isArray(agents.link_names)) {
+    if (!agents.link_names.length) {
+      errors.push("agents.link_names must contain at least one filename");
+    }
+    const seen = new Set();
+    for (const name of agents.link_names) {
+      if (
+        typeof name !== "string" ||
+        !/^[A-Za-z0-9._-]+\.md$/.test(name) ||
+        name.includes("/") ||
+        name.includes("\\")
+      ) {
+        errors.push("agents.link_names must contain plain *.md filenames");
+        continue;
+      }
+      if (seen.has(name)) errors.push(`agents.link_names has a duplicate: ${name}`);
+      seen.add(name);
+    }
+  }
+  if (agents.nested && agents.folder && agents.folder.replace(/\\/g, "/").endsWith("/")) {
+    errors.push("agents.folder must not end with a slash");
+  }
 }
 
 function validateModels(models, errors) {
@@ -621,6 +683,19 @@ function renderModelsBlock(models = DEFAULT_CONFIG.models) {
   return out;
 }
 
+function renderAgentsBlock(agents = DEFAULT_CONFIG.agents) {
+  let out = "agents:\n";
+  out += `  enabled: ${agents.enabled === false ? "false" : "true"}\n`;
+  out += `  folder: ${yamlString(agents.folder || ".orchid/agents")}\n`;
+  out += `  link_names: [${(agents.link_names || ["AGENTS.md"]).join(", ")}]\n`;
+  out += `  nested: ${agents.nested === false ? "false" : "true"}\n`;
+  out += `  max_targets: ${Number.isInteger(agents.max_targets) ? agents.max_targets : 12}\n`;
+  out += `  switch: ${agents.switch || "on_start"}\n`;
+  out += `  maintenance: ${agents.maintenance || "warn"}\n`;
+  out += `  mode: ${agents.mode || "auto"}\n`;
+  return out;
+}
+
 function renderSteeringBlock(steering = DEFAULT_CONFIG.steering) {
   let out = "steering:\n";
   out += `  enabled: [${steering.enabled.join(", ")}]\n`;
@@ -673,6 +748,7 @@ export function renderConfig({
   workspace = null,
   steering = DEFAULT_CONFIG.steering,
   models = DEFAULT_CONFIG.models,
+  agents = DEFAULT_CONFIG.agents,
 }) {
   const knowledgeFolder = paths.knowledgeFolder || ".knowledge";
   const docblocksFolder = paths.docblocksFolder || "docs/knowledge/docblocks";
@@ -730,6 +806,7 @@ constitution:
   require_adr_for_deviation: true
   lock: true
 
+${renderAgentsBlock(agents)}
 ${renderSteeringBlock(steering)}
 ${renderModelsBlock(models)}
 sources: []

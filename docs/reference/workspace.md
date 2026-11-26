@@ -53,6 +53,11 @@ Allowed fragment keys: `extends` (required), `project`, `execution`, `personas`,
 The CLI validates fragments and treats them as repo-specific policy for the
 agent. It does **not** merge them into the root config.
 
+Development agent contexts are detected per workspace repo (and per significant
+subfolder) under the root-owned `.orchid/agents/`. The switch replaces each
+repo’s `AGENTS.md` while an iteration runs and restores it at `agents off`; each
+repo’s project file remains user-owned. See [Agent contexts](agent-contexts.md).
+
 ## Commands
 
 | Operation | Command |

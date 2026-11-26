@@ -7,7 +7,7 @@ traceable memory graph, a dependency-ordered plan of independent prompts, and an
 audited change set. It works with OpenCode, Claude Code, Codex, and any other
 agent that can run a local command.
 
-- **Design:** [`docs/orchid-sdd-design.md`](docs/orchid-sdd-design.md) (v1.1)
+- **Design:** [`docs/orchid-sdd-design.md`](docs/orchid-sdd-design.md) (v1.2)
 - **Agent contract:** [`SKILL.md`](SKILL.md)
 - **Reference manual:** [`docs/reference/README.md`](docs/reference/README.md)
 - **Persona dossiers:** [`docs/personas/README.md`](docs/personas/README.md)
@@ -20,9 +20,10 @@ you type `/orchid-sdd`, `/orchid-sdd:run`, or call the `orchid-sdd` CLI.
 [Installation and agents](#installation-and-agent-setup) ·
 [Agent usage](#how-to-use-it-with-an-agent) · [Model routing](#right-agent-for-the-task-model-routing) ·
 [CLI](#cli-overview) · [Phases](#the-phases) · [Personas](#personas) ·
-[Steering and patterns](#steering-and-patterns) · [Customization](#customization) ·
-[Workspace and migration](#workspace-and-migration) · [Memory](#memory-and-auditability) ·
-[Operations](#operations) · [Documentation map](#documentation-map)
+[Steering and patterns](#steering-and-patterns) · [Agent contexts](#agent-contexts) ·
+[Customization](#customization) · [Workspace and migration](#workspace-and-migration) ·
+[Memory](#memory-and-auditability) · [Operations](#operations) ·
+[Documentation map](#documentation-map)
 
 ---
 
@@ -39,7 +40,8 @@ The usual failure modes are predictable:
 | “Looks good to me” passes as review | Independent adversarial review and a PM logic review are part of the process |
 | Parallel work corrupts shared state | Every mutation takes an exclusive lease; the event log has one writer |
 | The audit trail is buried in chat | State, events, matrix, reviews and snapshots are plain files in your repository |
-| The workflow only works with one harness | One Markdown contract plus a zero-dependency Node CLI, portable across agents |
+| The workflow only works with one harness | One Markdown contract plus a portable Node CLI, dependency-light and agent-agnostic |
+| Project agent docs decay or leak into the skill | Project `AGENTS.md` is user-owned; an optimised development context is switched in per task |
 | A long-running task loses its place | Handoffs and `resume` rebuild state from append-only events |
 
 The result is not “an agent that writes more code”. It is a process that keeps
@@ -59,10 +61,13 @@ the *why*, the *plan*, the *evidence* and the *code* connected.
   selectable architecture/repository patterns.
 - **Task-sized model routing** — map effort levels to an expected coding agent
   and model, verify the active one, and carry the expectation across handoffs.
+- **Dual agent contexts** — user-owned project `AGENTS.md` files stay useful without
+  orchid-sdd, while a nested, project-specific development context is swapped in for
+  each task and maintained at every iteration.
 - **Multi-repo support** — one root-owned knowledge base and one audit trail over
   several nested Git repositories.
-- **Local-first operability** — plain JSON/Markdown, no runtime dependencies,
-  no hosted service, no hidden database.
+- **Local-first operability** — plain JSON/Markdown, one small helper dependency for
+  the context switch, no hosted service, no hidden database.
 
 ---
 
@@ -300,6 +305,7 @@ commands accept `--json`; run `orchid-sdd --help` for the authoritative list.
 | Area | Commands | What they do |
 |---|---|---|
 | **Setup and health** | `setup`, `doctor`, `diff`, `status` | Initialise, validate, compare, orient |
+| **Agent contexts** | `agents init/sync/on/off/status/list/show`, `agents project list/sync/add` | Maintain project `AGENTS.md` and switch the development context |
 | **Iteration** | `start`, `gate`, `discover`, `assess`, `plan`, `build`, `review`, `close`, `handover`, `abandon`, `resume` | Drive the lifecycle |
 | **Waves** | `wave start`, `wave status`, `wave reconcile`, `wave abort` | Prepare, inspect, merge and clean parallel work |
 | **Prompts** | `prompt start`, `prompt step`, `prompt complete`, `prompt fail`, `prompt waive`, `prompt validate` | Record execution and validate contracts |
@@ -452,6 +458,75 @@ preset means and when to choose it: **[Patterns](docs/reference/patterns.md)**.
 
 ---
 
+## Agent contexts
+
+orchid-sdd keeps two agent-context flows deliberately separate:
+
+| Flow | Owner | Where | Kept for |
+|---|---|---|---|
+| **Project context** | You | `AGENTS.md`, nested `AGENTS.md` | Working with or without orchid-sdd |
+| **Development context** | orchid-sdd | `.orchid/agents/` | Optimising each orchid-sdd task |
+
+### Project `AGENTS.md` maintenance
+
+Setup **appends** a managed block and never rewrites your prose. Nested
+`AGENTS.md` files are respected as domain context. The maintenance step is part of
+the workflow:
+
+```bash
+orchid-sdd agents project list
+orchid-sdd agents project add src/orders   # optional nested skeleton
+orchid-sdd agents project sync             # refresh the managed block + record hashes
+```
+
+At the end of every iteration you update the root and relevant nested project
+files, then run `agents project sync`. The CLI records the hashes so closure can
+prove the step happened; it does not decide what your project docs should say.
+
+### Development context and the switch
+
+`setup` and `migrate init` generate a nested development dataset under
+`.orchid/agents/` from the existing agent context and the detected code domains:
+
+```text
+.orchid/agents/
+├── contexts.yml            # folder → context mapping
+├── agents/root/AGENTS.md   # orchestrator contract
+├── agents/src-api/AGENTS.md
+├── sources/                # preserved project context for integration
+├── MANIFEST.json
+└── runtime/                # generated activation state (Git-ignored)
+```
+
+When an iteration starts, orchid-sdd switches the visible `AGENTS.md` files to
+the development context and preserves your originals. It uses
+[`agent-contexts`](https://www.npmjs.com/package/agent-contexts) when available
+and a deterministic native fallback otherwise. The switch is restored by
+`orchid-sdd agents off`, by `abandon`, and before closure, so your project files
+come back exactly as they were.
+
+```bash
+orchid-sdd agents status
+orchid-sdd agents on        # manual switch
+orchid-sdd agents off       # restore project AGENTS.md
+orchid-sdd agents sync      # refresh the dataset + record its iteration evidence
+```
+
+New projects set `agents.maintenance: required`: `close --approve` refuses until
+`agents project sync` and `agents sync` have been run for the iteration. Use
+`--skip-agents` only for an explicit exception. Existing configs without an
+`agents` key get the non-blocking `warn` mode.
+
+Keep the two boundaries clean:
+
+- run `agents off` before manual Git commits; never commit a switched
+  `AGENTS.md` or `contexts.lock` (the generated CI workflow and `doctor` guard
+  both fail on them);
+- prompts cannot write `AGENTS.md` or `.orchid/agents/**`; `prompt validate` and
+  `prompt start` reject that scope.
+
+Full contract: **[Agent contexts](docs/reference/agent-contexts.md)**.
+
 ## Customization
 
 orchid-sdd is designed to be customized without forking it. The skill package
@@ -464,6 +539,7 @@ owns defaults and the CLI; your project owns policy.
 | Steering | `.orchid/steering/*.md` + `steering.phases` | Add or override architecture/style/repository rules |
 | Constitution | `constitution_folder` | Project-wide engineering rules and includes |
 | Templates | `customizations_folder` | PRD, TRD, prompt, CR, handover and tour templates |
+| Agent contexts | `.orchid/agents/` + `agents.*` | Nested development contexts, switch mode, maintenance policy |
 | Workspace repos | `workspace.repos[]` + `<repo>/orchid-sdd.yml` | Add repos, per-repo tests/personas/constitution |
 | Execution/review policy | `execution.*`, `reviews.*`, `governance.*` | Parallelism, isolation, test commands, review routing, approvals |
 
@@ -562,7 +638,8 @@ npm test
 
 The test suite covers setup, doctor, config validation, memory, gates, lifecycle,
 waves, worktrees, leases, workspace mode, migration, personas, steering, model
-routing and handoffs.
+routing, handoffs, and the project/development agent-context lifecycle in both
+library and native modes.
 
 Repository layout, test/benchmark instructions, CI checks and current limits are
 in **[Operations](docs/reference/operations.md)**.
@@ -584,6 +661,7 @@ in **[Operations](docs/reference/operations.md)**.
 | Use several repositories | [Workspace mode](docs/reference/workspace.md) |
 | Convert a legacy project | [Migration](docs/reference/migration.md) |
 | Choose architecture/style presets | [Patterns](docs/reference/patterns.md) |
+| Maintain project and development agent contexts | [Agent contexts](docs/reference/agent-contexts.md) |
 | Run checks and tests | [Operations](docs/reference/operations.md) |
 | Read the full specification | [Design document](docs/orchid-sdd-design.md) |
 

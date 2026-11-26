@@ -25,6 +25,7 @@ import { promptCommand } from "./prompts.mjs";
 import { handoffCommand } from "./handoff.mjs";
 import { dependenciesCommand } from "./dependencies.mjs";
 import { waveCommand } from "./waves.mjs";
+import { agentsCommand } from "./agents.mjs";
 
 const SKILL_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -35,7 +36,8 @@ const VALUE_OPTIONS = new Set([
   "persona-file", "knowledge-folder", "docblocks-folder", "constitution-folder",
   "customizations-folder", "repo", "output", "scope", "agent", "dest", "phase",
   "steering-preset", "current-agent", "current-model", "step", "reason", "handoff",
-  "kind", "limit", "history", "iteration", "budget",
+  "kind", "limit", "history", "iteration", "budget", "target", "dir", "sub",
+  "mode", "title",
 ]);
 const REPEATABLE = new Set([
   "relation",
@@ -98,6 +100,10 @@ Usage: orchid-sdd [--root DIR] <command> [options]
 Setup and inspection
   setup                       Configure the project (--profile, --persona, --force, --dry-run)
   skill install               Install the agent skill (--agent opencode|claude-code|generic)
+  agents init|sync|on|off|status|list|show
+                              Maintain and switch the development AGENTS.md dataset
+  agents project list|sync|add
+                              Maintain user-owned project AGENTS.md files
   doctor                      Validate config, paths, state, personas, steering (--ci, --online, --fix)
   status                      Show phase, gates, memory, steering, and next action (--json)
   diff                        Show overrides versus skill defaults (--content)
@@ -117,7 +123,7 @@ Iteration
   wave status [N]             Show wave, active prompts, worktrees
   wave reconcile N            Merge prompt branches, clean worktrees, close the wave
   wave abort N                Abort a wave and remove its worktrees/branches
-  close --approve             Close the active iteration
+  close --approve             Close the active iteration (--skip-agents to bypass context maintenance)
   handover [--approve]        Review or accept the human handover
   abandon "<reason>"          Abandon the active iteration
   resume                      Rebuild state and accept the latest handoff
@@ -141,7 +147,15 @@ setup options
   --no-steering-discovery  --no-steering-logic-review
   --knowledge-folder DIR  --docblocks-folder DIR
   --constitution-folder DIR  --customizations-folder DIR
-  --workspace | --single  --yes  --force  --dry-run  --json
+  --workspace | --single  --yes  --force  --dry-run  --json  --no-agents
+
+agents options
+  agents init [--force] [--json]
+  agents sync [--note TEXT] [--json]
+  agents on|off|status|list [--json]
+  agents show [TARGET] [--json]
+  agents project list|sync [--json]
+  agents project add DIR [--title TEXT]
 
 skill options
   --agent opencode|claude-code|generic  --global  --dest DIR
@@ -244,6 +258,7 @@ export async function main(argv) {
           force: flag(args.force),
           dryRun: flag(args["dry-run"]),
           yes: flag(args.yes),
+          agentsEnabled: !flag(args["no-agents"]),
           json,
         };
         const interactive =
@@ -285,6 +300,21 @@ export async function main(argv) {
         }
         runSetup(root, SKILL_ROOT, options);
         return 0;
+      }
+      case "agents": {
+        const action = positional[0] || "status";
+        const isProject = action === "project";
+        return agentsCommand(root, SKILL_ROOT, {
+          action,
+          sub: isProject ? positional[1] || "list" : undefined,
+          target: isProject ? positional[2] || args.target : positional[1] || args.target,
+          dir: args.dir,
+          title: args.title,
+          note: args.note,
+          reason: args.reason,
+          force: flag(args.force),
+          json,
+        });
       }
       case "doctor":
         return runDoctor(root, SKILL_ROOT, {
@@ -382,7 +412,12 @@ export async function main(argv) {
           json,
         });
       case "close":
-        return close(root, { approve: flag(args.approve), force: flag(args.force), json });
+        return close(root, {
+          approve: flag(args.approve),
+          force: flag(args.force),
+          skipAgents: flag(args["skip-agents"]),
+          json,
+        });
       case "handover":
         return handover(root, { approve: flag(args.approve), force: flag(args.force), json });
       case "abandon":

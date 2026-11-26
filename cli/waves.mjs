@@ -10,6 +10,7 @@ import {
 } from "./store.mjs";
 import { gitInfo } from "./workspace.mjs";
 import { withStateLock } from "./lock.mjs";
+import { isManagedAgentPath } from "./agents.mjs";
 import { OrchidError, exists, formatJson, nowIso, readJson, writeJson } from "./util.mjs";
 
 const WAVE_RE = /^(?:W)?([1-9][0-9]*)$/i;
@@ -443,7 +444,7 @@ function dirtyPath(line) {
   return value.replace(/\\/g, "/");
 }
 
-function assertCodeTreeClean(root, config, { allowDirty = false } = {}) {
+function assertCodeTreeClean(root, config, { allowDirty = false, state = null } = {}) {
   if (allowDirty) return;
   const workspacePaths = (config.workspace?.repos || [])
     .map((repo) => normalizeScope(repo.path))
@@ -459,6 +460,7 @@ function assertCodeTreeClean(root, config, { allowDirty = false } = {}) {
         value.startsWith(".knowledge/") ||
         value.startsWith(".orchid-migration-bck/")
       ) return false;
+      if (isManagedAgentPath(root, config, state, value)) return false;
       // The root repo may track nested workspace repos as gitlinks; their own
       // check below is authoritative.
       if (repo.repoDir === root && workspacePaths.some(
@@ -605,7 +607,7 @@ function startWave(root, config, state, number, args) {
   }
   // Ignore orchid-managed state/events/matrix changes, but refuse to freeze
   // worktrees while code changes are uncommitted and therefore absent from HEAD.
-  assertCodeTreeClean(root, config, { allowDirty: Boolean(args.allowDirty) });
+  assertCodeTreeClean(root, config, { allowDirty: Boolean(args.allowDirty), state });
   const plan = readPlan(root, config, state);
   const matrix = readMatrix(root, config, state);
   const planById = new Map(planPrompts(plan).map((prompt) => [prompt.id, prompt]));
