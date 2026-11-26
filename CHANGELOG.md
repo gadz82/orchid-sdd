@@ -1,3 +1,10 @@
+# [1.2.0](https://github.com/gadz82/orchid-sdd/compare/v1.1.0...v1.2.0) (2026-11-26)
+
+
+### Features
+
+* **agents:** maintain project and development agent contexts ([528a580](https://github.com/gadz82/orchid-sdd/commit/528a58087baeae4937928a4131bf9a75a8a9e269))
+
 # [1.1.0](https://github.com/gadz82/orchid-sdd/compare/v1.0.0...v1.1.0) (2026-11-11)
 
 
