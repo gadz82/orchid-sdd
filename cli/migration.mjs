@@ -2,8 +2,15 @@ import fs from "node:fs";
 import path from "node:path";
 import { detectProfile, detectProjectName, loadConfig } from "./config.mjs";
 import { runSetup } from "./setup.mjs";
-import { detectWorkspaceRepos, gitInfo, workspaceConfig } from "./workspace.mjs";
+import { detectWorkspaceRepos, gitInfo } from "./workspace.mjs";
 import { paths, readState, writeProjection, writeState } from "./store.mjs";
+import {
+  collectAgentSourceFiles,
+  collectProjectAgentFiles,
+  detectDomains,
+  syncAgentContexts,
+  syncProjectContext,
+} from "./agents.mjs";
 import { withStateLock } from "./lock.mjs";
 import {
   OrchidError,
@@ -177,6 +184,15 @@ export function scanProject(root, skillRoot) {
   );
   const agentsFile = path.join(root, "AGENTS.md");
   const legacyKnowledge = path.join(root, ".knowledge");
+  const configForAgents = config || { agents: {} };
+  const projectAgentFiles = collectProjectAgentFiles(root, configForAgents);
+  const agentSources = collectAgentSourceFiles(root, configForAgents);
+  const agentDomains = detectDomains(root, configForAgents, projectAgentFiles).map((domain) => ({
+    target: domain.target,
+    reasons: domain.reasons,
+    files: domain.files,
+    languages: domain.languages,
+  }));
 
   return {
     root,
@@ -199,6 +215,12 @@ export function scanProject(root, skillRoot) {
       config: exists(path.join(root, "orchid-sdd.yml")),
       agents: exists(agentsFile),
       agentsLines: exists(agentsFile) ? readText(agentsFile).split("\n").length : 0,
+      agentFiles: projectAgentFiles.map((file) => ({
+        path: file.path,
+        lines: file.lines,
+        managed: file.managed,
+      })),
+      agentSources: agentSources.map((file) => ({ path: file.path, kind: file.kind })),
       gitignore: exists(path.join(root, ".gitignore")),
       docblocks: exists(docblocksDir),
       constitution: exists(constitutionDir),
@@ -219,12 +241,19 @@ export function scanProject(root, skillRoot) {
     rootGit: gitInfo(root),
     languages: languageCounts(root),
     languagesByName: languageSummary(root),
+    agentContexts: {
+      projectFiles: projectAgentFiles.length,
+      sources: agentSources.length,
+      domains: agentDomains,
+      folder: (configForAgents.agents && configForAgents.agents.folder) || ".orchid/agents",
+    },
     suggested: {
       workspace: repos.length > 0,
       profile: repos.length > 0 ? "monorepo" : detectProfile(root),
       knowledgeFolder,
       migrationDir: MIGRATION_DIR,
       backupRoot: BACKUP_ROOT,
+      agentContexts: true,
     },
   };
 }
@@ -255,6 +284,10 @@ function backupAssets(root, scan) {
   add("config", path.join(root, "orchid-sdd.yml"), "root");
   add("state", path.join(root, ".orchid"), "root");
   add("agents", path.join(root, "AGENTS.md"), "root");
+  for (const file of scan.existing.agentFiles || []) {
+    if (file.path === "AGENTS.md") continue;
+    add("agents", path.join(root, file.path), "root");
+  }
   add("gitignore", path.join(root, ".gitignore"), "root");
   add("knowledge", path.join(root, scan.knowledge.folder), "root");
   if (scan.knowledge.folder !== ".knowledge") {
@@ -424,6 +457,8 @@ export function renderScan(scan) {
 - Knowledge folder: \`${scan.knowledge.folder}\` (${scan.knowledge.files} files)
 - Existing config: ${scan.existing.config ? "yes" : "no"}
 - Existing AGENTS.md: ${scan.existing.agents ? `yes (${scan.existing.agentsLines} lines)` : "no"}
+- Agent context files: ${scan.existing.agentFiles?.length || 0} project AGENTS.md, ${scan.existing.agentSources?.length || 0} source file(s)
+- Development context domains: ${(scan.agentContexts?.domains || []).map((domain) => `\`${domain.target}\``).join(", ") || "—"}
 - Legacy anchors: ${scan.existing.anchors}
 ${scan.configError ? `- Config error: ${scan.configError}\n` : ""}
 ## Repositories
@@ -487,8 +522,25 @@ ${repoList}
 4. Generated the root \`orchid-sdd.yml\` (workspace-aware).
 5. Generated per-repo \`orchid-sdd.yml\` overrides with \`extends\`.
 6. Created the root-owned \`.knowledge\` skeleton, state, manifest, and indexes.
+7. Generated the development agent-context dataset under \`.orchid/agents/\` from the
+   existing project \`AGENTS.md\`/agent sources and the detected code domains.
 
 The CLI did **not** invent memories. That is the LLM migration work below.
+
+## Agent contexts
+
+Two distinct flows must survive the migration:
+
+- **Project context** — the user-owned \`AGENTS.md\` files (root and nested). Keep them
+  useful without orchid-sdd and never overwrite user content; only the managed block is
+  refreshed by \`orchid-sdd agents project sync\`.
+- **Development context** — the orchid-sdd-specific dataset under \`.orchid/agents/\`.
+  It is curated from the project context and the codebase, linked only while an
+  orchid-sdd iteration runs, and updated at the end of every iteration.
+
+Original agent sources are preserved under \`.orchid/agents/sources/\` so curation can
+continue while the switch hides the project files. Run \`orchid-sdd agents sync\` after
+curating; see \`.orchid/migration/prompts/05-agent-contexts.md\`.
 
 ## Non-negotiable rules
 
@@ -561,7 +613,15 @@ under \`.orchid/steering/examples/<language>/\` and create a blocking
 \`orchid-sdd steering context --phase build\`; every example must resolve and be visible to the
 Build phase. If approval is refused, record why and leave the default rule unchanged.
 
-## Stage 5 — Reorganize legacy knowledge safely
+## Stage 5 — Maintain both agent-context flows
+
+Follow \`.orchid/migration/prompts/05-agent-contexts.md\`. The CLI scaffolded
+\`.orchid/agents/\` from the existing agent context and code domains. Curate the development
+context (root + nested by domain), update the user-owned project \`AGENTS.md\` files without
+overwriting user prose, then run \`orchid-sdd agents project sync\` and
+\`orchid-sdd agents sync\`.
+
+## Stage 6 — Reorganize legacy knowledge safely
 
 The CLI moved reusable legacy material into
 \`${scan.knowledge.folder}/input/legacy/\` after creating the backup. Keep the original
@@ -569,7 +629,7 @@ taxonomy recognizable (adr/, specs/, plans/, prompts/, progress/). Use those pat
 recording artifacts. The legacy originals no longer remain at the knowledge root; the
 backup is the rollback copy.
 
-## Stage 6 — Validate and finalize
+## Stage 7 — Validate and finalize
 
 \`\`\`bash
 orchid-sdd index
@@ -681,7 +741,43 @@ Build context.
 Acceptance: every significant language has an approved example or a recorded waiver; the
 project \`code-examples\` override is blocking and resolves; if the proposal was refused, the
 refusal is recorded and no examples or override were created.`,
-    "05-finalize.md": `# Migration prompt 05 — Validate and finalize
+    "05-agent-contexts.md": `# Migration prompt 05 — Maintain both agent-context flows
+
+Two flows are distinct and both matter.
+
+## Project AGENTS.md (user-owned)
+
+Read \`.orchid/migration/scan.json\` (\`existing.agentFiles\`, \`existing.agentSources\`) and
+every sizeable domain in \`agentContexts.domains\`. Keep the root \`AGENTS.md\` and any
+nested \`AGENTS.md\` useful for a developer who does **not** use orchid-sdd: architecture,
+commands, conventions, boundaries, and gotchas. Integrate existing content; never replace
+user prose. Add nested \`AGENTS.md\` only where a domain genuinely needs its own context;
+use \`orchid-sdd agents project add <dir>\` for a non-destructive skeleton.
+
+## Development context (orchid-sdd-owned)
+
+Read \`.orchid/agents/MANIFEST.json\` and the preserved sources under
+\`.orchid/agents/sources/\`. Curate \`.orchid/agents/agents/root/AGENTS.md\` and the nested
+domain files:
+
+- keep the orchid-sdd workflow and hard rules;
+- add project facts that change how an orchid-sdd agent works (entry points, test seams,
+  build commands, invariants, recurring failure modes);
+- remove anything that merely repeats the project \`AGENTS.md\` or conflicts with the
+  orchid-sdd protocol.
+
+Do not copy secrets, credentials, customer data, or long code excerpts.
+
+Then run:
+
+\`\`\`bash
+orchid-sdd agents project sync
+orchid-sdd agents sync
+\`\`\`
+
+Acceptance: the project root managed block is current, the development context is
+specific to this project and nested by domain, and \`agents sync\` records both hashes.`,
+    "06-finalize.md": `# Migration prompt 06 — Validate and finalize
 
 Verify \`${scan.knowledge.folder}/input/legacy/\` exists and that recorded artifacts point
 to it. If it is missing, stop and report; do not delete the originals or the backup.
@@ -690,12 +786,16 @@ If code-style examples were approved, verify \`.orchid/steering/code-examples.md
 listed example resolve and appear in \`orchid-sdd steering context --phase build\`. If they were
 refused, verify the proposal records the decision.
 
+Verify both agent-context flows: \`orchid-sdd agents status\`, \`orchid-sdd agents list\`,
+and \`.orchid/agents/project-context.json\`. Run \`orchid-sdd agents sync\` if either flow
+changed after the previous sync.
+
 Run \`orchid-sdd index\`, \`orchid-sdd lint\`, \`orchid-sdd doctor\`, then
 \`orchid-sdd migrate finalize\`. Review \`.orchid/migration/REPORT.md\`. Fix findings
 before finalizing. Do not delete the backup.
 
-Acceptance: phase is \`ready\`, the report is written, and the next \`orchid-sdd start\`
-can begin.`,
+Acceptance: phase is \`ready\`, the report is written, both agent-context flows are
+recorded, and the next \`orchid-sdd start\` can begin.`,
   };
 }
 
@@ -777,6 +877,11 @@ export function migrateInit(root, skillRoot, options = {}) {
     if (state.activeIteration) {
       throw new OrchidError(
         `iteration "${state.activeIteration}" is active; close or abandon it before migrating`,
+      );
+    }
+    if (state.agentContext?.active) {
+      throw new OrchidError(
+        "the development agent context is active; run `orchid-sdd agents off` before migrating",
       );
     }
   }
@@ -891,6 +996,16 @@ export function migrateFinalize(root, skillRoot, options = {}) {
       );
     }
   }
+  const agentSync = loaded.config.agents.enabled
+    ? (() => {
+        const project = syncProjectContext(root, loaded.config, { state });
+        const result = syncAgentContexts(root, loaded.config, state, {
+          locked: true,
+          note: "migration finalize",
+        });
+        return { ...result, project };
+      })()
+    : { targets: [], project: null };
   const { manifest } = writeProjection(root, loaded.config, state);
   if (!manifest.nodes.length && !options.force) {
     throw new OrchidError(
@@ -909,6 +1024,8 @@ export function migrateFinalize(root, skillRoot, options = {}) {
 - Knowledge: \`${loaded.config.knowledge_folder}\`
 - Legacy material: \`${loaded.config.knowledge_folder}/input/legacy\`
 - Workspace: ${loaded.config.workspace && loaded.config.workspace.enabled ? `${loaded.config.workspace.repos.length} repo(s)` : "disabled"}
+- Development agent contexts: ${agentSync.targets.length} target(s) under \`${loaded.config.agents.folder}\`
+- Project agent context: ${agentSync.project ? `${agentSync.project.files.length} AGENTS.md file(s)` : "not synced"}
 
 ## Next
 

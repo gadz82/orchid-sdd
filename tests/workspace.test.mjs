@@ -102,6 +102,9 @@ test("close records workspace Git state and the repo index", () => {
   assert.equal(cli(root, "gate", "pass", "G5", "--note", "reviewed").code, 0);
   assert.equal(cli(root, "review").code, 0);
   assert.equal(cli(root, "gate", "pass", "G6", "--evidence", "intent/title.md").code, 0);
+  assert.equal(cli(root, "agents", "off").code, 0);
+  assert.equal(cli(root, "agents", "project", "sync").code, 0);
+  assert.equal(cli(root, "agents", "sync").code, 0);
   const closed = cli(root, "close", "--approve");
   assert.equal(closed.code, 0, closed.all);
 

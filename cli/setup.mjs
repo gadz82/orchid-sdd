@@ -17,47 +17,25 @@ import { withStateLock } from "./lock.mjs";
 import { OrchidError, ensureDir, exists, formatJson, readText, writeJson } from "./util.mjs";
 import { detectWorkspaceRepos, findWorkspaceRoot, workspaceConfig, writeRepoFragments } from "./workspace.mjs";
 import { parseFrontMatter } from "./yaml.mjs";
+import {
+  GITIGNORE_BEGIN,
+  GITIGNORE_END,
+  agentsBlock,
+  gitignoreBlock,
+  initAgentContexts,
+  syncProjectContext,
+  upsertManaged,
+} from "./agents.mjs";
 
-export const AGENTS_BEGIN = "<!-- orchid-sdd:begin -->";
-export const AGENTS_END = "<!-- orchid-sdd:end -->";
-export const GITIGNORE_BEGIN = "# orchid-sdd:begin";
-export const GITIGNORE_END = "# orchid-sdd:end";
-
-export function agentsBlock(knowledgeFolder, constitutionFolder = ".orchid/constitution") {
-  return `${AGENTS_BEGIN}
-## orchid-sdd memory
-- Code may carry \`ORCHID-MEM: <uuid> — <short behaviour>\` anchors. The anchor is the only memory/history reference in code; history lives in the UUID docblock. Resolve it before changing that code's behaviour.
-- Inline comments explain why or a non-obvious invariant only; never restate code or copy history.
-- Read \`${knowledgeFolder}/manifest.jsonld\` and \`${knowledgeFolder}/index/\` — plain JSON; the JSON-LD context is optional.
-- Search by topic or question first: \`orchid-sdd recall <topic|question|uuid|path>\`.
-- \`${knowledgeFolder}/index/recall.json\` is generated and Git-ignored; never hand-edit it. When it is missing or stale, run \`orchid-sdd index\` (preferred) or let the first \`recall\` rebuild it. If the CLI is unavailable, warn the user before retrieval: "The recall index cannot be rebuilt without the orchid-sdd CLI. Retrieval is limited to \`manifest.jsonld\` and the versioned core indexes."
-- Never edit \`${knowledgeFolder}/**\`, the manifest, or docblocks of code you do not own. Write code; propose knowledge.
-- Follow \`${constitutionFolder}/\` for how code is written here.
-- Read \`orchid-sdd steering context --phase <phase>\` before Discovery and Logic Review; apply every active rule and cite its ID.
-- Before Build, read the Build steering context and follow the project code examples for the language; a deviation requires an ADR.
-- Run \`orchid-sdd route --phase <phase>\` before work; if the current model/agent is unknown or mismatched, tell the user. Never switch automatically.
-- Track development prompts with \`orchid-sdd prompt start|step|complete\`; save a checkpoint with \`orchid-sdd handoff prepare\` before changing harness.
-- For independent prompts use \`orchid-sdd wave start <N>\`, then start up to \`execution.max_parallel\` prompts; finish with \`orchid-sdd wave reconcile <N>\`. Retry reconciliation after fixing a conflict or test. State mutations are leased through \`.orchid/locks/state.lock\`; never bypass a live lease.
-- Run the CLI against the project root (or pass \`--root <root>\`), even while editing inside a prompt worktree; the root owns state, events, knowledge, and the lease.
-- Ask before starting whether to create a feature branch and from which base; record the answer in the TRD. If not, stay on the current branch.
-- Each prompt gets one disposable worktree and temporary branch; remove both immediately after CR and merge. Never leave an \`orchid/<iteration>/<prompt-id>\` branch behind.
-- In workspace mode, record every discovered cross-repo dependency in \`.orchid/cross-repo-dependencies.md\`; cite the \`DEP-###\` row in prompt contracts and CR.
-${AGENTS_END}
-`;
-}
-
-export function gitignoreBlock(knowledgeFolder) {
-  return `${GITIGNORE_BEGIN}
-${knowledgeFolder}/run-log/
-${knowledgeFolder}/index/recall.json
-${knowledgeFolder}/iterations/*/execution/runs/
-${knowledgeFolder}/iterations/*/plan/prompts/_bus/
-.orchid/worktrees/
-.orchid/locks/
-.orchid-migration-bck/
-${GITIGNORE_END}
-`;
-}
+export {
+  AGENTS_BEGIN,
+  AGENTS_END,
+  GITIGNORE_BEGIN,
+  GITIGNORE_END,
+  agentsBlock,
+  gitignoreBlock,
+  upsertManaged,
+} from "./agents.mjs";
 
 export const CONTEXT = {
   "@context": {
@@ -88,6 +66,18 @@ jobs:
           node-version: "20"
       # Install the CLI from your registry, or use a linked/local package in CI.
       - run: npm install -g orchid-sdd
+      - name: Guard agent context
+        run: |
+          committed="$(git grep -l '<!-- orchid-sdd:development-context -->' -- '*.md' | grep -v '^\\.orchid/agents/' || true)"
+          if [ -n "$committed" ]; then
+            echo "::error::Development agent context was committed. Run 'orchid-sdd agents off' before committing."
+            echo "$committed"
+            exit 1
+          fi
+          if git ls-files --error-unmatch contexts.lock >/dev/null 2>&1; then
+            echo "::error::contexts.lock is local activation state and must not be committed."
+            exit 1
+          fi
       - run: orchid-sdd doctor --ci
       - run: orchid-sdd lint --check
       - run: orchid-sdd index --check
@@ -200,18 +190,6 @@ steering:
 Run \`orchid-sdd doctor\`, then \`orchid-sdd steering list\` and
 \`orchid-sdd steering context --phase discovery\`.
 `;
-}
-
-export function appendManaged(file, block, begin, end) {
-  if (exists(file)) {
-    const current = readText(file);
-    if (current.includes(begin)) return false;
-    const separator = current.endsWith("\n") ? "\n" : "\n\n";
-    fs.appendFileSync(file, `${separator}${block}`, "utf8");
-    return true;
-  }
-  fs.writeFileSync(file, block, "utf8");
-  return true;
 }
 
 function normalizePath(label, value, fallback) {
@@ -381,6 +359,13 @@ export function runSetup(root, skillRoot, options = {}) {
       logic_review: options.steeringLogicReview !== false,
     },
   });
+  const agentsConfig = {
+    ...DEFAULT_CONFIG.agents,
+    enabled: options.agentsEnabled !== false,
+    // New projects get the strict workflow by default. Existing configs without
+    // an `agents` key inherit the non-breaking `warn` default.
+    maintenance: options.agentsMaintenance || "required",
+  };
   const configText = renderConfig({
     projectName,
     profileId,
@@ -391,6 +376,7 @@ export function runSetup(root, skillRoot, options = {}) {
     workspace,
     steering: steeringConfig,
     models: options.models || DEFAULT_CONFIG.models,
+    agents: agentsConfig,
   });
   const configPath = path.join(root, "orchid-sdd.yml");
   const statePath = path.join(root, ".orchid", "state.json");
@@ -399,6 +385,11 @@ export function runSetup(root, skillRoot, options = {}) {
     if (current.activeIteration || Object.keys(current.currentWaves || {}).length) {
       throw new OrchidError(
         "setup --force would discard an active iteration or wave; close/abandon the iteration first",
+      );
+    }
+    if (current.agentContext?.active) {
+      throw new OrchidError(
+        "setup --force would discard an active development agent context; run `orchid-sdd agents off` first",
       );
     }
   }
@@ -415,6 +406,9 @@ export function runSetup(root, skillRoot, options = {}) {
     `${pathConfig.knowledgeFolder}/input`,
     `${pathConfig.knowledgeFolder}/run-log`,
     pathConfig.docblocksFolder,
+    `${agentsConfig.folder}/agents`,
+    `${agentsConfig.folder}/sources`,
+    `${agentsConfig.folder}/runtime`,
   ].map((item) => path.join(root, item));
   const personaTargets = custom.map((item) =>
     path.join(root, ".orchid", "personas", `${item.id}.md`),
@@ -504,15 +498,16 @@ export function runSetup(root, skillRoot, options = {}) {
   writeIfAbsent(path.join(root, "ORCHID-SDD.md"), orchidReadme(config));
   writeIfAbsent(path.join(root, ".github", "workflows", "orchid-sdd.yml"), ciYaml());
 
-  appendManaged(
+  upsertManaged(
     path.join(root, "AGENTS.md"),
-    agentsBlock(pathConfig.knowledgeFolder, pathConfig.constitutionFolder),
-    AGENTS_BEGIN,
-    AGENTS_END,
+    agentsBlock(pathConfig.knowledgeFolder, pathConfig.constitutionFolder, {
+      enabled: agentsConfig.enabled,
+      agentsFolder: agentsConfig.folder,
+    }),
   );
-  appendManaged(
+  upsertManaged(
     path.join(root, ".gitignore"),
-    gitignoreBlock(pathConfig.knowledgeFolder),
+    gitignoreBlock(pathConfig.knowledgeFolder, config),
     GITIGNORE_BEGIN,
     GITIGNORE_END,
   );
@@ -527,6 +522,12 @@ export function runSetup(root, skillRoot, options = {}) {
   }
   writeState(root, state);
   writeProjection(root, config, state, { recall: true });
+
+  let agentContexts = { enabled: false, targets: [], files: [] };
+  if (agentsConfig.enabled) {
+    agentContexts = initAgentContexts(root, config);
+    syncProjectContext(root, config, { state });
+  }
 
   if (options.json) {
     process.stdout.write(
@@ -546,11 +547,17 @@ export function runSetup(root, skillRoot, options = {}) {
         },
         models: config.models,
         workspace: config.workspace,
+        agents: {
+          enabled: config.agents.enabled,
+          folder: config.agents.folder,
+          maintenance: config.agents.maintenance,
+          targets: agentContexts.targets,
+        },
         state: { phase: state.phase, gates: state.gates },
         next: 'orchid-sdd start "<title>"',
       })}\n`,
     );
-    return { config, state };
+    return { config, state, agentContexts };
   }
   process.stdout.write(`orchid-sdd configured: ${config.project.name} (profile: ${config.project.profile})\n`);
   process.stdout.write(`  knowledge  ${config.knowledge_folder}\n`);
@@ -561,9 +568,17 @@ export function runSetup(root, skillRoot, options = {}) {
   if (config.workspace && config.workspace.enabled) {
     process.stdout.write(`  workspace  ${config.workspace.repos.length} repo(s): ${config.workspace.repos.map((repo) => repo.id).join(", ")}\n`);
   }
+  process.stdout.write(
+    `  agents     ${config.agents.enabled ? `${agentContexts.targets.length} context(s) in ${config.agents.folder}` : "disabled"}\n`,
+  );
+  if (config.agents.enabled) {
+    process.stdout.write(
+      `             project AGENTS.md is user-owned; the development context switches on at \`orchid-sdd start\`\n`,
+    );
+  }
   process.stdout.write(`  state      G0 passed\n`);
   process.stdout.write(`Next: orchid-sdd start "<title>"\n`);
-  return { config, state };
+  return { config, state, agentContexts };
 }
 
 const ALLOWED_PHASES = PHASE_NAMES;

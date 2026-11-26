@@ -32,6 +32,12 @@ test("setup creates a valid workspace and doctor passes", () => {
   ]) {
     assert.ok(fs.existsSync(path.join(root, file)), `missing ${file}`);
   }
+  const workflow = fs.readFileSync(
+    path.join(root, ".github/workflows/orchid-sdd.yml"),
+    "utf8",
+  );
+  assert.match(workflow, /Guard agent context/);
+  assert.match(workflow, /orchid-sdd:development-context/);
   const doctor = cli(root, "doctor");
   assert.equal(doctor.code, 0, doctor.all);
   const ci = cli(root, "doctor", "--ci");
@@ -185,6 +191,8 @@ test("the skill package ships personas, profiles, and constitution defaults", ()
     ".skill/schemas/steering.schema.json",
     "SKILL.md",
     "commands/orchid-sdd.md",
+    "cli/agents.mjs",
+    "docs/reference/agent-contexts.md",
   ]) {
     assert.ok(fs.existsSync(path.join(ROOT, file)), `missing ${file}`);
   }

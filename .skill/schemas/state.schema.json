@@ -30,6 +30,21 @@
     "lastHandoff": { "type": ["string", "null"] },
     "lastEvent": { "type": ["string", "null"] },
     "memoryEvent": { "type": ["string", "null"] },
-    "migration": { "type": ["object", "null"] }
+    "migration": { "type": ["object", "null"] },
+    "agentContext": {
+      "type": "object",
+      "properties": {
+        "active": { "type": "boolean" },
+        "mode": { "enum": ["library", "native", null] },
+        "linkNames": { "type": "array", "items": { "type": "string" } },
+        "targets": { "type": "array", "items": { "type": "string" } },
+        "activatedAt": { "type": ["string", "null"] },
+        "iteration": { "type": ["string", "null"] },
+        "datasetHash": { "type": ["string", "null"] },
+        "lastSync": { "type": ["object", "null"] },
+        "lastMaintenance": { "type": ["object", "null"] },
+        "runtime": { "type": ["string", "null"] }
+      }
+    }
   }
 }

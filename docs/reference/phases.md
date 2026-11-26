@@ -58,8 +58,9 @@ orchid-sdd review     # fails until G5 is passed
 **Purpose:** provision the project workspace and validate the toolchain.
 
 `setup` writes the root config, state, artifact directories, constitution,
-personas, steering, managed `AGENTS.md`/`.gitignore` sections and the CI workflow.
-It marks G0 passed.
+personas, steering, managed `AGENTS.md`/`.gitignore` sections, the development
+agent-context dataset under `.orchid/agents/`, and the CI workflow. It marks G0
+passed. `--no-agents` opts out of the dataset and the switch.
 
 ```bash
 orchid-sdd setup --profile backend --yes
@@ -67,7 +68,8 @@ orchid-sdd doctor
 ```
 
 Artifacts: `orchid-sdd.yml`, `.orchid/`, `.knowledge/`, `docs/knowledge/docblocks/`,
-`AGENTS.md`, `.gitignore`, `.github/workflows/orchid-sdd.yml`, `ORCHID-SDD.md`.
+`.orchid/agents/`, `AGENTS.md`, `.gitignore`, `.github/workflows/orchid-sdd.yml`,
+`ORCHID-SDD.md`.
 
 ## G1 — Intent
 
@@ -176,6 +178,11 @@ Per prompt:
 6. complete or waive the prompt;
 7. reconcile the wave (merge, test, remove worktrees and branches).
 
+`prompt validate` and `prompt start` reject an `AGENTS.md` or `.orchid/agents/**`
+entry in `scope.write`; agent-context maintenance belongs to closure. Manual Git
+operations must run with `agents off`, and a switched `AGENTS.md` is rejected by
+`doctor` and by the generated CI guard.
+
 Routing is task-size-aware: the prompt effort (`low`…`ultra`) maps to an expected
 agent/model, and `models.mismatch: block` makes `prompt start` refuse a confirmed
 mismatch. See [Models and efforts](configuration.md#models-and-efforts).
@@ -222,7 +229,15 @@ Closure archives transient run artifacts, writes the iteration snapshot and
 records each repo's HEAD. It refuses to proceed while a wave is active or a prompt
 branch/worktree remains.
 
-Artifacts: `iteration.jsonld`, archived `audit/`, repo index snapshot.
+It also enforces the agent-context maintenance step when
+`agents.maintenance: required`: the development switch must be off, the project
+and development contexts must have been updated, and `agents project sync` plus
+`agents sync` must have recorded evidence for the current iteration. Closure
+restores the project `AGENTS.md` files before snapshotting. See
+[Agent contexts](agent-contexts.md).
+
+Artifacts: `iteration.jsonld`, archived `audit/`, repo index snapshot,
+`.orchid/agents/project-context.json`, `.orchid/agents/MANIFEST.json`.
 
 Human approval: **yes** (`--approve`).
 

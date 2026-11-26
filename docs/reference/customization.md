@@ -18,7 +18,8 @@ overrides; the skill package owns defaults and the CLI.
 | Steering overrides | `steering.overrides.<ID>` | `authority`, `phases` or `file` | CLI + agent |
 | Constitution | `constitution_folder` | Add rules, compose with `@include`, keep the profile pack | Agent + CR |
 | Templates | `customizations_folder`, mirroring `.skill/templates` | Override a PRD/TRD/prompt/CR/handover template | Agent; `diff` audits |
-| AGENTS contract | `AGENTS.md` | Managed block is written by setup; add project guidance outside it | Agent |
+| Project agent context | `AGENTS.md`, nested `AGENTS.md` | User-owned prose plus a managed block; `agents project sync` refreshes only the block | Agent; `agents project` audits |
+| Development agent context | `.orchid/agents/` | Nested orchid-sdd contexts, sources, mappings and the switch | CLI + agent |
 | Workspace registry | `workspace.repos[]` | Add/remove repos, profiles, tests, personas | CLI + agent |
 | Repo overrides | `<repo>/orchid-sdd.yml` | `extends` + allowed keys only | CLI + agent |
 | External sources | `sources[]` | Declare MCP/Git/local sources; `doctor --online` | CLI + agent |

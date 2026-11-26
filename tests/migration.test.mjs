@@ -42,6 +42,13 @@ test("migrate init backs up legacy assets and scaffolds a workspace", () => {
   assert.ok(fs.existsSync(path.join(root, "pkg-a", "orchid-sdd.yml")));
   assert.ok(fs.existsSync(path.join(root, "MIGRATION.md")));
   assert.ok(fs.existsSync(path.join(root, ".orchid/migration/PLAN.md")));
+  assert.ok(fs.existsSync(path.join(root, ".orchid/agents/contexts.yml")));
+  assert.ok(fs.existsSync(path.join(root, ".orchid/agents/MANIFEST.json")));
+  assert.ok(fs.existsSync(path.join(root, ".orchid/agents/project-context.json")));
+  assert.ok(fs.existsSync(path.join(root, ".orchid/agents/sources/project/AGENTS.md")));
+  const agents = fs.readFileSync(path.join(root, "AGENTS.md"), "utf8");
+  assert.match(agents, /Project instructions/);
+  assert.match(agents, /orchid-sdd memory/);
   assert.ok(fs.existsSync(path.join(root, ".orchid/migration/prompts/01-inventory.md")));
   const codePrompt = fs.readFileSync(
     path.join(root, ".orchid/migration/prompts/03-code.md"),
@@ -55,7 +62,13 @@ test("migrate init backs up legacy assets and scaffolds a workspace", () => {
   );
   assert.match(examplesPrompt, /Approve these code-style examples\?/);
   assert.match(examplesPrompt, /\.orchid\/steering\/examples\/<language>\//);
-  assert.ok(fs.existsSync(path.join(root, ".orchid/migration/prompts/05-finalize.md")));
+  const agentPrompt = fs.readFileSync(
+    path.join(root, ".orchid/migration/prompts/05-agent-contexts.md"),
+    "utf8",
+  );
+  assert.match(agentPrompt, /orchid-sdd agents project sync/);
+  assert.match(agentPrompt, /orchid-sdd agents sync/);
+  assert.ok(fs.existsSync(path.join(root, ".orchid/migration/prompts/06-finalize.md")));
 
   const status = cli(root, "migrate", "status", "--json");
   assert.equal(status.code, 0, status.all);

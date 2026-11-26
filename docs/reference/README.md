@@ -11,6 +11,7 @@ project README is the short introduction and entry point.
 | [Memory model](memory.md) | Events, manifest, indexes, `record`, `recall`, anchors, docblocks and lint |
 | [Personas](personas.md) | Default cast, optional roles, custom personas, authority and phase mapping |
 | [Steering](steering.md) | Constitution vs steering, rule format, core rules, phase context and overrides |
+| [Agent contexts](agent-contexts.md) | Project `AGENTS.md` maintenance, nested development contexts, the switch, and end-of-iteration sync |
 | [Patterns](patterns.md) | Architecture, repository and language presets shipped as steering rules |
 | [Configuration](configuration.md) | Complete `orchid-sdd.yml` reference, model/effort routing and resolution order |
 | [Customization](customization.md) | Personas, steering, constitution, templates, workspace overrides and how to add a phase |

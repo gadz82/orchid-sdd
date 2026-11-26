@@ -36,6 +36,13 @@ import { detectCurrentIdentity, evaluateRoute, resolveRoute } from "./models.mjs
 import { acceptHandoff, findHandoff } from "./handoff.mjs";
 import { withStateLock } from "./lock.mjs";
 import { assertNoPromptArtifacts } from "./waves.mjs";
+import {
+  activateAgentContexts,
+  agentContextStatus,
+  assertAgentMaintenance,
+  deactivateAgentContexts,
+  reconcileAgentContext,
+} from "./agents.mjs";
 
 function context(root) {
   const loaded = loadConfig(root);
@@ -122,6 +129,11 @@ export function start(root, args) {
   if (state.activeIteration) {
     throw new OrchidError(`iteration "${state.activeIteration}" is already active; close or abandon it first`);
   }
+  // A previous crash may have left the switch on after the iteration ended.
+  deactivateAgentContexts(root, config, state, {
+    locked: true,
+    reason: "leftover switch before a new iteration",
+  });
   assertClean(root, config, { allowDirty: Boolean(args.allowDirty) });
   const title = validateTitle(args.title, Number(config.governance.title_max_chars) || 500);
   const base = `${today()}-${slugify(title)}`;
@@ -186,12 +198,35 @@ export function start(root, args) {
   }, { locked: true });
   writeProjection(root, config, state);
 
+  let agents = null;
+  if (config.agents.enabled && (config.agents.switch || "on_start") === "on_start") {
+    try {
+      agents = activateAgentContexts(root, config, state, {
+        locked: true,
+        reason: "iteration start",
+      });
+    } catch (error) {
+      throw new OrchidError(
+        `iteration "${iteration}" is active but the development agent context could not be activated: ${error.message}. ` +
+          'Run `orchid-sdd agents on` to retry, or `orchid-sdd abandon "<reason>"`.',
+      );
+    }
+    writeProjection(root, config, state);
+  }
+
   if (args.json) {
-    process.stdout.write(`${formatJson({ id: iteration, title, rigor, phase: "intent" })}\n`);
+    process.stdout.write(
+      `${formatJson({ id: iteration, title, rigor, phase: "intent", agents })}\n`,
+    );
     return 0;
   }
   process.stdout.write(`Started ${iteration}\n`);
   process.stdout.write(`  ${title}\n`);
+  if (agents && agents.active) {
+    process.stdout.write(
+      `  agents     on (${agents.mode}) · ${(agents.targets || []).length} context(s)\n`,
+    );
+  }
   process.stdout.write(`  ${nextAction("intent")}\n`);
   return 0;
 }
@@ -425,6 +460,16 @@ export function close(root, args) {
   }
   const iteration = path.join(paths(root, config).iterations, state.activeIteration);
   assertPromptsDone(iteration, Boolean(args.force));
+  const maintenance = assertAgentMaintenance(root, config, state, {
+    skip: Boolean(args.skipAgents),
+  });
+  for (const warning of maintenance.warnings) process.stdout.write(`  [warn] ${warning}\n`);
+  if (maintenance.problems.length) {
+    throw new OrchidError(
+      `agent context maintenance is required before closure:\n - ${maintenance.problems.join("\n - ")}`,
+    );
+  }
+  deactivateAgentContexts(root, config, state, { locked: true, reason: "closure" });
   const id = state.activeIteration;
   state.gates.G7 = "passed";
   state.phase = "closed";
@@ -467,6 +512,7 @@ export function abandon(root, args) {
   }
   const reason = String(args.reason || "").trim();
   if (!reason) throw new OrchidError("abandon requires a reason: orchid-sdd abandon \"<reason>\"");
+  deactivateAgentContexts(root, config, state, { locked: true, reason: "iteration abandoned" });
   const id = state.activeIteration;
   const moved = archiveTransients(root, config, state);
   const workspace = captureWorkspaceState(root, config);
@@ -584,6 +630,18 @@ export function resume(root, args) {
   let currentWaves = {};
   let lastWave = state.lastWave || null;
   let lastHandoff = null;
+  let agentContext = {
+    active: false,
+    mode: null,
+    linkNames: [],
+    targets: [],
+    activatedAt: null,
+    iteration: null,
+    datasetHash: null,
+    lastSync: null,
+    lastMaintenance: null,
+    runtime: null,
+  };
   const acceptedHandoffs = new Set();
   const gates = Object.fromEntries(Object.keys(state.gates).map((gate) => [gate, "pending"]));
 
@@ -604,6 +662,16 @@ export function resume(root, args) {
       currentWaves = {};
       lastWave = null;
       lastHandoff = null;
+      agentContext = {
+        ...agentContext,
+        active: false,
+        mode: null,
+        linkNames: [],
+        targets: [],
+        activatedAt: null,
+        iteration: null,
+        runtime: null,
+      };
       for (const gate of Object.keys(gates)) gates[gate] = "pending";
       gates.G0 = "passed";
     } else if (event.type === "iteration.closed" || event.type === "iteration.abandoned") {
@@ -720,6 +788,55 @@ export function resume(root, args) {
     } else if (event.type === "handoff.accepted" && payload.id) {
       lastHandoff = payload.id;
       acceptedHandoffs.add(payload.id);
+    } else if (event.type === "agents.activated") {
+      agentContext = {
+        ...agentContext,
+        active: true,
+        mode: payload.mode || null,
+        targets: payload.targets || [],
+        linkNames: payload.linkNames || [],
+        activatedAt: event.ts,
+        iteration: payload.iteration || null,
+      };
+    } else if (event.type === "agents.deactivated") {
+      agentContext = {
+        ...agentContext,
+        active: false,
+        mode: null,
+        targets: [],
+        linkNames: [],
+        activatedAt: null,
+        runtime: null,
+      };
+    } else if (event.type === "agents.synced") {
+      agentContext = {
+        ...agentContext,
+        datasetHash: payload.datasetHash || agentContext.datasetHash,
+        lastSync: {
+          at: event.ts,
+          iteration: payload.iteration || null,
+          datasetHash: payload.datasetHash || null,
+          note: payload.note || null,
+        },
+        lastMaintenance: payload.maintained
+          ? {
+              at: event.ts,
+              iteration: payload.iteration || null,
+              datasetHash: payload.datasetHash || null,
+              projectHash: payload.projectHash || null,
+            }
+          : agentContext.lastMaintenance,
+      };
+    } else if (event.type === "agents.project_synced") {
+      agentContext = {
+        ...agentContext,
+        lastMaintenance: {
+          at: event.ts,
+          iteration: payload.iteration || null,
+          datasetHash: payload.datasetHash || agentContext.datasetHash,
+          projectHash: payload.projectHash || payload.hash || null,
+        },
+      };
     }
   }
 
@@ -739,6 +856,7 @@ export function resume(root, args) {
   state.gates = gates;
   state.lastEvent = last ? last.eventId : state.lastEvent;
   state.memoryEvent = lastMemory ?? state.memoryEvent;
+  state.agentContext = agentContext;
 
   let acceptedHandoff = null;
   if (active && !args.noHandoff) {
@@ -763,6 +881,10 @@ export function resume(root, args) {
     : null;
   writeState(root, state);
   writeProjection(root, config, state);
+  const agentReconcile = reconcileAgentContext(root, config, state, {
+    locked: Boolean(args.__locked),
+  });
+  if (agentReconcile) writeProjection(root, config, state);
   if (args.json) {
     process.stdout.write(
       `${formatJson({
@@ -774,6 +896,7 @@ export function resume(root, args) {
         currentPrompt: state.currentPrompt,
         currentRun: state.currentRun,
         routing,
+        agents: agentContextStatus(root, config, state),
       })}\n`,
     );
     return 0;
@@ -787,6 +910,12 @@ export function resume(root, args) {
     );
   }
   process.stdout.write(`  last event ${state.lastEvent || "none"}\n`);
+  const agents = agentContextStatus(root, config, state);
+  if (agents.enabled) {
+    process.stdout.write(
+      `  agents ${agents.active ? `on (${agents.mode})` : "off"} · ${agents.targets.length} target(s)\n`,
+    );
+  }
   if (routing) {
     process.stdout.write(
       `  routing ${routing.effort} (${routing.source}) → ${routing.expectedText || "unassigned"}\n`,
@@ -831,6 +960,7 @@ export function status(root, args) {
   const currentRun = currentPrompt && state.currentRun
     ? state.runs[state.currentRun] || null
     : null;
+  const agents = agentContextStatus(root, config, state);
   const payload = {
     project: config.project.name,
     profile: config.project.profile,
@@ -851,6 +981,7 @@ export function status(root, args) {
     steering: steering.rules.map((rule) => rule.id),
     steeringArtifact: steering.rules.length ? steeringArtifact(state.phase) : null,
     routing,
+    agents,
     next: nextAction(state.phase),
   };
   if (args.json) {
@@ -885,6 +1016,11 @@ export function status(root, args) {
   if (steering.rules.length) {
     process.stdout.write(
       `Steering ${steering.rules.map((rule) => `${rule.id}[${rule.authority}]`).join(", ")}\n`,
+    );
+  }
+  if (agents.enabled) {
+    process.stdout.write(
+      `Agents   ${agents.active ? `on (${agents.mode})` : "off"} · ${agents.targets.length} target(s)${agents.lastMaintenance ? ` · maintained ${agents.lastMaintenance.at}` : ""}\n`,
     );
   }
   if (routing) printRouting(routing);

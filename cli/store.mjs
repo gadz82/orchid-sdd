@@ -91,6 +91,18 @@ export function newState(cfg, configHash) {
     lastHandoff: null,
     lastEvent: null,
     memoryEvent: null,
+    agentContext: {
+      active: false,
+      mode: null,
+      linkNames: [],
+      targets: [],
+      activatedAt: null,
+      iteration: null,
+      datasetHash: null,
+      lastSync: null,
+      lastMaintenance: null,
+      runtime: null,
+    },
   };
 }
 
@@ -122,6 +134,19 @@ export function readState(root) {
     state.lastWave.prompts = Array.isArray(state.lastWave.prompts) ? state.lastWave.prompts : [];
   }
   state.lastHandoff = state.lastHandoff || null;
+  state.agentContext = {
+    active: false,
+    mode: null,
+    linkNames: [],
+    targets: [],
+    activatedAt: null,
+    iteration: null,
+    datasetHash: null,
+    lastSync: null,
+    lastMaintenance: null,
+    runtime: null,
+    ...(state.agentContext || {}),
+  };
   state.memoryEvent = state.memoryEvent ?? state.lastEvent ?? null;
   // Migrate a pre-wave single cursor into the multi-run projection.
   if (!Object.keys(state.activePrompts).length && state.currentPrompt) {
@@ -854,6 +879,7 @@ export function writeIterationSnapshot(root, cfg, state, status, reason = null, 
     },
     gates: manifest.gates,
     nodes: manifest.nodes,
+    ...(state.agentContext ? { agentContext: state.agentContext } : {}),
     ...(workspace ? { workspace } : {}),
   };
   const file = path.join(dir, "iteration.jsonld");

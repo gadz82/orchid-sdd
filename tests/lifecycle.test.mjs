@@ -48,6 +48,9 @@ test("the full lifecycle closes and hands over", () => {
   assert.equal(noApproval.code, 1);
   assert.match(noApproval.all, /human approval/);
 
+  assert.equal(cli(root, "agents", "off").code, 0);
+  assert.equal(cli(root, "agents", "project", "sync").code, 0);
+  assert.equal(cli(root, "agents", "sync").code, 0);
   const closed = cli(root, "close", "--approve");
   assert.equal(closed.code, 0, closed.all);
   assert.match(closed.out, /Do you want to start the technical handover\?/);

@@ -18,7 +18,8 @@ If the sentinel is missing, refuse and print:
 Never infer a command from a general request such as "plan this feature".
 
 Detailed operator reference: `docs/reference/README.md` (CLI, phases, memory,
-personas, steering, configuration, customization, workspace, migration).
+personas, steering, agent contexts, configuration, customization, workspace,
+migration).
 
 # Role: you are the orchestrator
 
@@ -67,12 +68,21 @@ Shape the update for the phase:
 
 1. Run `orchid-sdd status` (or `node bin/orchid-sdd.mjs status --root .`).
 2. Run `orchid-sdd doctor` if config, sources, personas, or steering changed.
-3. Read `AGENTS.md`, `.orchid/constitution/constitution.md`, and the relevant manifest slice.
-4. Run `orchid-sdd steering context --phase <current-phase>` and read every active rule.
-5. Run `orchid-sdd route --phase <current-phase>`; if the current model/agent is unknown or
+3. Read the **active development context**:
+   - if `status.agents.active` is true, read the switched `AGENTS.md` (it is the
+     orchid-sdd development context) and its nested domain files;
+   - if the switch is off, read `.orchid/agents/agents/root/AGENTS.md` and the nested
+     context for the folder you will change;
+   - never treat the user's project `AGENTS.md` as active while the switch is on. The
+     original files are preserved in `.orchid/agents/sources/` for integration.
+   - if the host already loaded the project file before this invocation, discard its
+     instructions for the duration and reread the active development context.
+4. Read `.orchid/constitution/constitution.md` and the relevant manifest slice.
+5. Run `orchid-sdd steering context --phase <current-phase>` and read every active rule.
+6. Run `orchid-sdd route --phase <current-phase>`; if the current model/agent is unknown or
    does not match the expected assignment, stop and tell the user. Never switch automatically.
-6. Never load the whole knowledge graph; query `orchid-sdd recall <topic|question|uuid|path|DEP-###>`.
-7. In workspace mode, read `.orchid/cross-repo-dependencies.md` or run
+7. Never load the whole knowledge graph; query `orchid-sdd recall <topic|question|uuid|path|DEP-###>`.
+8. In workspace mode, read `.orchid/cross-repo-dependencies.md` or run
    `orchid-sdd dependencies list --status open --json` to load open cross-repo edges for the
    changed repos.
 
@@ -80,8 +90,10 @@ Shape the update for the phase:
 
 | Intent | Command |
 |---|---|
-| Configure the project | `orchid-sdd setup --profile <backend\|frontend\|infra\|monorepo\|custom> [--workspace\|--single] [--steering-preset ID] [--no-steering] [--no-steering-discovery] [--no-steering-logic-review] [--json]` |
+| Configure the project | `orchid-sdd setup --profile <backend\|frontend\|infra\|monorepo\|custom> [--workspace\|--single] [--steering-preset ID] [--no-steering] [--no-steering-discovery] [--no-steering-logic-review] [--no-agents] [--json]` |
 | Install agent skill | `orchid-sdd skill install --agent opencode\|claude-code\|generic` |
+| Maintain development contexts | `orchid-sdd agents init\|sync\|on\|off\|status\|list\|show` |
+| Maintain project AGENTS.md | `orchid-sdd agents project list\|sync\|add <dir>` |
 | Inspect personas | `orchid-sdd persona list [--json]` / `persona show <ID>` |
 | Inspect steering | `orchid-sdd steering list [--phase P] [--json]` / `steering show <ID>` |
 | Apply phase steering | `orchid-sdd steering context --phase <phase>` |
@@ -162,8 +174,9 @@ presets and whether rules apply to Discovery and Logic Review. Model routing is 
 enabled, choose the default effort, each phase’s effort, and an agent/model for each used
 effort. Agents should use `--yes` plus explicit
 flags and `--json` instead of answering prompts. Setup is idempotent but never overwrites user
-files without `--force`. If an MCP or Git source is declared, `doctor --online` must pass
-before G1.
+files without `--force`. It also scaffolds `.orchid/agents/` from the existing agent context
+and detected domains; `--no-agents` disables the flow. If an MCP or Git source is declared,
+`doctor --online` must pass before G1.
 
 ## Phase 1 — Intent
 
@@ -271,7 +284,12 @@ Artifacts: `plan/plan.json`, `plan/matrix.md`, `plan/matrix.json`, `plan/cost-es
   disjoint write scopes, including against other active waves. Never run a dependent prompt
   before its `depends_on` prompts are `done` or `waived`, and never start a dependent wave
   before the wave that produced its dependency has been reconciled.
-- Give each implementer a context pack, not the repository.
+- Give each implementer a context pack, not the repository. `prompt start` writes
+  `execution/runs/<run>/context.md` with the root development context and the nested
+  contexts matching the prompt’s write scope; hand that file to the implementer. Do not
+  paste the project `AGENTS.md` into a subagent context.
+- `prompt validate` and `prompt start` reject `AGENTS.md`/`.orchid/agents/**` in
+  `scope.write`; those files belong to the end-of-iteration maintenance flow.
 - Keep inline comments why-only; update the anchor and docblock for significant units, with
   history in the docblock.
 - The orchestrator runs acceptance tests in a clean environment; the implementer's claim
@@ -323,6 +341,10 @@ Artifacts: `reviews/logic-review.md`, `reviews/steering-review.md`.
 
 ## Phase 7 — Closure
 
+- Complete agent-context maintenance: `agents off`, update the project `AGENTS.md`
+  files, update `.orchid/agents/agents/**/AGENTS.md`, then `agents project sync` and
+  `agents sync`. `close` refuses when `agents.maintenance: required` and this evidence
+  is missing.
 - Confirm every prompt is `done` or `waived`; tests green; lint/index current.
 - Verify branch hygiene: no prompt worktrees and no `orchid/<iteration>/<prompt-id>`
   branches remain.
@@ -366,6 +388,60 @@ explicit project decisions that must be checked and cited.
   ADR, not a silent waiver.
 - The CLI validates references, but the agent owns semantic compliance. `steering context`
   provides the rule pack; it does not prove the rule was followed.
+
+# Agent contexts (project vs development)
+
+orchid-sdd maintains **two separate flows**. Never merge them.
+
+| Flow | Owner | Location | Purpose |
+|---|---|---|---|
+| **Project context** | User | `AGENTS.md`, nested `AGENTS.md` | Useful with or without orchid-sdd |
+| **Development context** | orchid-sdd | `.orchid/agents/agents/**/AGENTS.md` | Optimised orchestration context |
+
+## Project context (user-owned)
+
+- Treat every `AGENTS.md` as user-owned. Integrate; never overwrite user prose.
+- `orchid-sdd setup` and `orchid-sdd agents project sync` only refresh the managed
+  `<!-- orchid-sdd:begin -->` block at the root. Nested files are never rewritten.
+- At the end of every iteration, update the root and relevant nested project
+  `AGENTS.md` with durable project guidance, then run
+  `orchid-sdd agents project sync`.
+- `orchid-sdd agents project add <dir>` creates a non-destructive nested skeleton.
+- Keep the project context free of orchid-sdd runtime instructions beyond the managed
+  block; it must remain useful when orchid-sdd is not installed.
+
+## Development context (orchid-sdd-owned)
+
+- The source of truth is `.orchid/agents/`:
+  - `contexts.yml` maps project folders to nested development context files;
+  - `agents/root/AGENTS.md` is the orchestrator contract;
+  - `agents/<domain>/AGENTS.md` is the folder-scoped context;
+  - `sources/` preserves the original project agent context for integration;
+  - `MANIFEST.json` records targets, languages, files, and hashes.
+- The dataset is generated at `setup` and `migrate init` from the existing agent
+  context and the detected code domains. Curate it during migration and at the end of
+  every iteration.
+- The switch uses `agent-contexts` when available (`agents.mode: auto|library`) and a
+  deterministic native implementation otherwise (`agents.mode: native`).
+- With `agents.switch: on_start` (default), `orchid-sdd start` replaces the project
+  `AGENTS.md` files with the development context and preserves the originals.
+  `orchid-sdd agents off` restores them. `close` restores them as well.
+- **Never edit the project `AGENTS.md` while the switch is on**; it is the development
+  context. Run `agents off` first if you need to update project guidance.
+
+## End-of-iteration maintenance (mandatory when configured)
+
+1. Finish implementation and CR; pass G6.
+2. `orchid-sdd agents off` — restore the user's project files.
+3. Update the root and nested project `AGENTS.md`.
+4. Update `.orchid/agents/agents/**/AGENTS.md` with orchid-sdd-specific facts learned
+   in this iteration (entry points, test seams, invariants, recurring failures).
+5. `orchid-sdd agents project sync` then `orchid-sdd agents sync`.
+6. `orchid-sdd close --approve`.
+
+`close` enforces this when `agents.maintenance: required`. Use
+`close --approve --skip-agents` only for a deliberate, documented exception. `agents
+maintenance: warn` reports the gap without blocking; `off` disables the check.
 
 # Model and agent routing
 
@@ -542,7 +618,9 @@ Severities: critical, high, medium, low. `block_on` gates critical/high.
 - Logic loop exhausted: follow-up iteration (`followUpTo`) or waived risk with ADR.
 - Merge conflict: stop; do not improvise. Re-plan the affected prompts.
 - Unresolved cross-repo dependency: block the prompt or CR until the `DEP-###` row is verified or waived with an ADR.
-- Crash: `orchid-sdd resume` replays events, aborts half-finished merges, re-queues prompts.
+- Crash: `orchid-sdd resume` replays events, aborts half-finished merges, re-queues prompts, and reconciles the agent-context switch.
+- Agent-context switch stuck or broken: `orchid-sdd agents status`, then `agents off`; if state is lost, `doctor --fix`. Never edit or delete a user `AGENTS.md.bak` by hand.
+- Closure blocked by agent contexts: run `agents off`, update both flows, then `agents project sync` and `agents sync`; use `--skip-agents` only for a documented exception.
 - Ambiguity: write a Markdown questionnaire; never make a business decision silently.
 
 # Workspace mode (multi-repo)
@@ -593,7 +671,11 @@ from `.knowledge/index/cross-repo-dependencies.json` (its generated index) and
    writing anything under `.orchid/steering/examples/`. After approval, create the blocking
    `.orchid/steering/code-examples.md` override and run `doctor` plus
    `steering context --phase build`.
-6. `orchid-sdd index`, `lint`, `doctor`, then `migrate finalize` → `phase: ready`.
+6. Maintain both agent-context flows (`05-agent-contexts.md`): curate the nested development
+   context under `.orchid/agents/`, update the user-owned project `AGENTS.md` files without
+   overwriting user prose, add nested project contexts only where a domain needs one, then run
+   `agents project sync` and `agents sync`. `migrate finalize` also refreshes the dataset.
+7. `orchid-sdd index`, `lint`, `doctor`, then `migrate finalize` → `phase: ready`.
 
 Rules: evidence over invention; one fact per node; preserve the backup; move legacy material
 into `input/legacy/` only after the backup is verified; never delete the backup. Never create
@@ -615,3 +697,8 @@ project code-style examples without explicit approval.
 12. Never silently continue after a model/agent mismatch; notify the user and let them decide.
 13. Never generate project code-style examples during migration before explicit human approval.
 14. Never leave a discovered cross-repo dependency only in chat; record it as a `DEP-###` row in `.orchid/cross-repo-dependencies.md`.
+15. Never overwrite a project `AGENTS.md`; integrate it and preserve user prose outside the managed block.
+16. Never mix the project context and the development context. The switch must be off before editing project guidance.
+17. Never close an iteration with `agents.maintenance: required` without recording `agents project sync` and `agents sync` evidence.
+18. Never put `AGENTS.md` or `.orchid/agents/**` in a prompt `scope.write`; keep that work in the end-of-iteration flow.
+19. Run `agents off` before manual commits. Never commit a switched `AGENTS.md`, `contexts.lock`, `.contexts/`, or `AGENTS.md.bak*`.

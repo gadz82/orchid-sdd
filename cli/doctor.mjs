@@ -7,9 +7,27 @@ import { loadSteering, validateSteeringRefs } from "./steering.mjs";
 import { validateWorkspace } from "./workspace.mjs";
 import { CONTEXT } from "./setup.mjs";
 import { checkProjection, loadManifestNodes, paths, readState, recallIndexProblem, writeProjection } from "./store.mjs";
-import { ensureDir, exists, formatJson, readJson, writeJson } from "./util.mjs";
+import { ensureDir, exists, formatJson, readJson, readText, writeJson } from "./util.mjs";
 import { LEDGER_FILE, formatLedgerDiagnostic, parseRelatedIds, readLedger } from "./dependencies.mjs";
 import { readStateLock, withStateLock } from "./lock.mjs";
+import {
+  AGENTS_BEGIN,
+  AGENTS_END,
+  DEV_CONTEXT_MARKER,
+  GITIGNORE_BEGIN,
+  GITIGNORE_END,
+  activateAgentContexts,
+  agentContextStatus,
+  agentPaths,
+  agentsBlock,
+  collectProjectAgentFiles,
+  deactivateAgentContexts,
+  gitignoreBlock,
+  initAgentContexts,
+  managedBlockState,
+  syncProjectContext,
+  upsertManaged,
+} from "./agents.mjs";
 
 export function runDoctor(root, skillRoot, options = {}) {
   if (options.fix && !options.__locked) {
@@ -165,11 +183,169 @@ export function runDoctor(root, skillRoot, options = {}) {
     fail(error.message);
   }
   if (personaMap) {
-    const workspace = validateWorkspace(root, config, personaMap);
+    const workspace = validateWorkspace(root, config, personaMap, { state });
     for (const message of workspace.errors) fail(message);
     for (const message of workspace.warnings) warn(message);
     if (config.workspace && config.workspace.enabled) {
       info(`workspace: ${workspace.repos.length} enabled repo(s)`);
+    }
+  }
+
+  let agentContextActive = false;
+  if (config.agents && config.agents.enabled === false) {
+    const p = agentPaths(root, config);
+    if (exists(p.runtimeFile) || exists(p.libraryMarker)) {
+      warn("agent contexts are disabled but an activation is still present; run `orchid-sdd agents off`");
+      if (options.fix) {
+        deactivateAgentContexts(root, config, state, { locked: true, reason: "doctor --fix" });
+        fixes.push("cleaned a leftover activation after agent contexts were disabled");
+      }
+    }
+  }
+  if (config.agents && config.agents.enabled !== false) {
+    try {
+      const agentStatus = agentContextStatus(root, config, state);
+      agentContextActive = agentStatus.active;
+      if (agentStatus.error) {
+        fail(`agent contexts: ${agentStatus.error}`);
+      }
+      if (!agentStatus.initialized) {
+        if (options.fix) {
+          initAgentContexts(root, config, {
+            preserveProjectSources: Boolean(
+              agentStatus.active || agentStatus.library || agentStatus.lockOurs,
+            ),
+          });
+          fixes.push("initialized development agent contexts");
+        } else {
+          warn("development agent contexts are not initialized; run `orchid-sdd agents init`");
+        }
+      } else {
+        info(`agent contexts: ${agentStatus.targets.length} target(s), ${agentStatus.active ? `active (${agentStatus.mode})` : "off"}`);
+      }
+      if (agentStatus.active && !state.activeIteration) {
+        warn("development agent context is active without an active iteration; run `orchid-sdd agents off`");
+        if (options.fix) {
+          deactivateAgentContexts(root, config, state, { locked: true, reason: "doctor --fix" });
+          agentContextActive = false;
+          fixes.push("restored project AGENTS.md from a leftover switch");
+        }
+      }
+      const brokenLinks = (agentStatus.links || []).filter((link) => !link.healthy);
+      if (agentContextActive && brokenLinks.length) {
+        warn(
+          `development agent-context link(s) are missing or broken: ${brokenLinks
+            .map((link) => link.path)
+            .join(", ")}; run \`orchid-sdd agents on\` to refresh the switch`,
+        );
+        if (options.fix) {
+          activateAgentContexts(root, config, state, { locked: true, reason: "doctor --fix" });
+          fixes.push("refreshed development agent-context links");
+        }
+      }
+      if (
+        state.activeIteration &&
+        (config.agents.switch || "on_start") === "on_start" &&
+        !agentStatus.active
+      ) {
+        warn("development agent context is not active while an iteration is running; run `orchid-sdd agents on`");
+      }
+      if (
+        !agentStatus.active &&
+        (agentStatus.library || agentStatus.lockOurs || (agentStatus.contextsCache && !agentStatus.foreignLock))
+      ) {
+        warn("leftover agent-context activation without an active switch; run `orchid-sdd agents off`");
+        if (options.fix) {
+          deactivateAgentContexts(root, config, state, { locked: true, reason: "doctor --fix" });
+          fixes.push("cleaned leftover agent-context activation");
+        }
+      } else if (!agentStatus.active && agentStatus.foreignLock) {
+        info("foreign contexts.lock detected; orchid-sdd leaves it untouched and uses the native mode");
+      }
+      if (
+        agentStatus.lastMaintenance &&
+        agentStatus.datasetHash &&
+        agentStatus.lastMaintenance.datasetHash !== agentStatus.datasetHash
+      ) {
+        warn("development agent context changed after the last sync; run `orchid-sdd agents sync`");
+      }
+      if (agentStatus.projectDrift) {
+        warn("project AGENTS.md changed after the last project sync; run `orchid-sdd agents project sync`");
+      }
+      const p = agentPaths(root, config);
+      if (!agentStatus.active && !exists(p.projectContext)) {
+        if (options.fix) {
+          syncProjectContext(root, config, { state });
+          fixes.push("wrote project agent-context manifest");
+        } else {
+          info("project agent-context manifest is missing; run `orchid-sdd agents project sync`");
+        }
+      }
+    } catch (error) {
+      fail(`agent contexts: ${error.message}`);
+    }
+  }
+
+  try {
+    for (const file of collectProjectAgentFiles(root, config)) {
+      if (!file.path.endsWith("AGENTS.md")) continue;
+      if (!isTracked(root, file.absolute)) continue;
+      if (readText(file.absolute).includes(DEV_CONTEXT_MARKER)) {
+        fail(
+          `${file.path} is committed with the development-context marker; run \`orchid-sdd agents off\` and commit the project AGENTS.md`,
+        );
+      }
+    }
+    const trackedAgentState = spawnSync(
+      "git",
+      ["-C", root, "ls-files", "--", "contexts.lock", ".contexts"],
+      { encoding: "utf8" },
+    );
+    if (trackedAgentState.status === 0 && trackedAgentState.stdout.trim()) {
+      fail(
+        `local agent-context activation state is tracked by Git: ${trackedAgentState.stdout
+          .trim()
+          .split("\n")
+          .join(", ")}; remove it from the index`,
+      );
+    }
+  } catch (error) {
+    warn(`cannot check committed agent context: ${error.message}`);
+  }
+
+  for (const [file, block, begin, end, label] of [
+    [
+      path.join(root, "AGENTS.md"),
+      agentsBlock(config.knowledge_folder, config.constitution_folder, {
+        enabled: !config.agents || config.agents.enabled !== false,
+        agentsFolder: config.agents.folder,
+      }),
+      AGENTS_BEGIN,
+      AGENTS_END,
+      "AGENTS.md managed block",
+    ],
+    [
+      path.join(root, ".gitignore"),
+      gitignoreBlock(config.knowledge_folder, config),
+      GITIGNORE_BEGIN,
+      GITIGNORE_END,
+      ".gitignore managed block",
+    ],
+  ]) {
+    if (label.startsWith("AGENTS.md") && agentContextActive) continue;
+    const stateInfo = managedBlockState(file, begin, end);
+    if (!stateInfo.complete) {
+      warn(`${label} is missing or incomplete; run \`orchid-sdd setup --force\` or \`doctor --fix\``);
+      if (options.fix) {
+        const result = upsertManaged(file, block, begin, end);
+        fixes.push(`${result} ${label}`);
+      }
+    } else if (stateInfo.current.trim() !== block.trim()) {
+      warn(`${label} is stale; run \`orchid-sdd doctor --fix\` to refresh it`);
+      if (options.fix) {
+        const result = upsertManaged(file, block, begin, end);
+        fixes.push(`${result} ${label}`);
+      }
     }
   }
 
